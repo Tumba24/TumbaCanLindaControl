@@ -12,7 +12,7 @@ namespace Tumba.CanLindaControl.Services
 
         public static void WriteMessageToConsole(string type, string message)
         {
-            Console.WriteLine("[{0}] {1}", type, message);
+            Console.WriteLine("{0} [{1}] {2}", DateTime.Now.ToString("U"), type, message);
         }
 
         public void Info(string message)

@@ -1,9 +1,7 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using System;
-using System.IO;
-using System.Net;
-using System.Text;
+﻿using System;
+using System.Threading;
+using Tumba.CanLindaControl.Model;
+using Tumba.CanLindaControl.Services;
 
 namespace Tumba.CanLindaControl
 {
@@ -29,39 +27,38 @@ coincontrol {rpcuser} {rpcpassword} {frequencyInMilliseconds}";
                 return;
             }
 
-
-        }
-
-        public static void DoTest()
-        {
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create("http://localhost:15715");
-            request.Credentials = new NetworkCredential("user", "password");
-            request.ContentType = "application/json-rpc";
-            request.Method = "POST";
-
-            JObject requestObj = new JObject();
-            requestObj.Add(new JProperty("jsonrpc", "1.0"));
-            requestObj.Add(new JProperty("id", "1"));
-            requestObj.Add(new JProperty("method", "getinfo"));
-
-            string requestObjStr = JsonConvert.SerializeObject(requestObj);
-            byte[] requestObjData = Encoding.UTF8.GetBytes(requestObjStr);
-
-            request.ContentLength = requestObjData.Length;
-            using (Stream requestStream = request.GetRequestStream())
+            Method method;
+            if (!Enum.TryParse<Method>(args[0], true, out method))
             {
-                requestStream.Write(requestObjData, 0, requestObjData.Length);
+                Console.WriteLine("Specified method not recognized!");
+                Environment.Exit(-1);
             }
 
-            using (WebResponse response = request.GetResponse())
+            using (ManualResetEvent wait = new ManualResetEvent(false))
             {
-                using (Stream responseStream = response.GetResponseStream())
+                ConsoleMessageHandlingService messagHandler = new ConsoleMessageHandlingService(() =>
                 {
-                    byte[] responseObjData = new byte[8000];
-                    responseStream.Read(responseObjData, 0, responseObjData.Length);
-                    string responseObjStr = Encoding.UTF8.GetString(responseObjData);
-                    Console.WriteLine(responseObjStr);
+                    wait.Set();
+                });
+
+                string errorMessage;
+                switch (method)
+                {
+                    case Method.CoinControl:
+                    default:
+                    {
+                        CoinControlService service = new CoinControlService(messagHandler);
+                        if (!service.TryParseArgs(args, out errorMessage))
+                        {
+                            Console.WriteLine(errorMessage);
+                            Environment.Exit(-2);
+                        }
+                        service.Start();
+                        break;
+                    }
                 }
+
+                wait.WaitOne();
             }
         }
     }
