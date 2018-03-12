@@ -2,7 +2,7 @@ using System;
 
 namespace Tumba.CanLindaControl.Services
 {
-    public class ConsoleMessageHandlingService : IMessageHandlingService
+    public class ConsoleMessageHandlingService
     {
         public Action FailCallback { get; private set; }
         public ConsoleMessageHandlingService(Action failCallback)
