@@ -5,7 +5,7 @@ using System.IO;
 using System.Net;
 using System.Text;
 
-namespace TumbaCanLindaControl
+namespace Tumba.CanLindaControl
 {
     public class Program
     {
@@ -28,6 +28,8 @@ coincontrol {rpcuser} {rpcpassword} {frequencyInMilliseconds}";
                 Console.WriteLine(USAGE);
                 return;
             }
+
+
         }
 
         public static void DoTest()
