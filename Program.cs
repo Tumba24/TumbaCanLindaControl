@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Threading;
 using Tumba.CanLindaControl.Model;
 using Tumba.CanLindaControl.Services;
 
@@ -14,7 +13,7 @@ Linda-qt.exe -server=1 -rpcuser=user -rpcpassword=password -rpcallowip=127.0.0.1
 -rpcuser and -rpcpassword should be changed.
 
 Tumba can Linda control command line methods:
-coincontrol {rpcuser} {rpcpassword} {frequencyInMilliseconds}";
+coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {frequencyInMilliseconds}";
 
         public static void Main(string[] args)
         {
@@ -34,31 +33,14 @@ coincontrol {rpcuser} {rpcpassword} {frequencyInMilliseconds}";
                 Environment.Exit(-1);
             }
 
-            using (ManualResetEvent wait = new ManualResetEvent(false))
+            switch (method)
             {
-                ConsoleMessageHandlingService messagHandler = new ConsoleMessageHandlingService(() =>
+                case Method.CoinControl:
+                default:
                 {
-                    wait.Set();
-                });
-
-                string errorMessage;
-                switch (method)
-                {
-                    case Method.CoinControl:
-                    default:
-                    {
-                        CoinControlService service = new CoinControlService(messagHandler);
-                        if (!service.TryParseArgs(args, out errorMessage))
-                        {
-                            Console.WriteLine(errorMessage);
-                            Environment.Exit(-2);
-                        }
-                        service.Start();
-                        break;
-                    }
+                    CoinControlService.Run(args);
+                    break;
                 }
-
-                wait.WaitOne();
             }
         }
     }
