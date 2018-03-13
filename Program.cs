@@ -33,6 +33,7 @@ coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {frequencyInMilliseco
                 Environment.Exit(-1);
             }
 
+            // TODO: Add a method for handling master node earnings.
             switch (method)
             {
                 case Method.CoinControl:
