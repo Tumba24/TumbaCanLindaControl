@@ -453,9 +453,9 @@ namespace Tumba.CanLindaControl.Services
                 return;
             }
 
-            DoCoinControl();
-
             MessageService.Info(string.Format("Coin control set to run every {0} milliseconds.", FrequencyInMilliSeconds));
+
+            DoCoinControl();
             m_timer.Start();
         }
 
