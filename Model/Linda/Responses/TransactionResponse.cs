@@ -23,5 +23,8 @@ namespace Tumba.CanLindaControl.Model.Linda.Responses
         [JsonProperty("time")]
         public long Time { get; set; }
 
+        [JsonProperty("txid")]
+        public string TransactionId { get; set; }
+
     }
 }

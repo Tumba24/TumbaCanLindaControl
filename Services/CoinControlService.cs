@@ -32,6 +32,23 @@ namespace Tumba.CanLindaControl.Services
 
         private bool CheckIfCoinControlIsNeeded(List<UnspentResponse> unspentInNeedOfCoinControl)
         {
+            List<TransactionResponse> imatureTransactions = GetImatureTransactions(1);
+            if (imatureTransactions == null)
+            {
+                return false;
+            }
+
+            if (imatureTransactions.Count > 0)
+            {
+                MessageService.Info(string.Format(
+                    "Coin control status: Waiting for stake to mature - {0} LINDA {1} confirmations {2}",
+                    imatureTransactions[0].Amount,
+                    imatureTransactions[0].Confirmations,
+                    imatureTransactions[0].TransactionId));
+
+                return false;
+            }
+
             foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
             {
                 if (unspent.Confirmations < DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL)
@@ -329,12 +346,22 @@ namespace Tumba.CanLindaControl.Services
             return info.Fee;
         }
 
+        private List<TransactionResponse> GetImatureTransactions(int numberOfDays)
+        {
+            return GetTransactions("immature", numberOfDays);
+        }
+
         private List<TransactionResponse> GetStakingTransactions(int numberOfDays)
+        {
+            return GetTransactions("generate", numberOfDays);
+        }
+
+        private List<TransactionResponse> GetTransactions(string category, int numberOfDays)
         {
             DateTimeOffset localNowDate = DateTimeOffset.Now.Date;
             DateTimeOffset localXDaysAgo = localNowDate.AddDays(numberOfDays * -1);
 
-            List<TransactionResponse> stakingTransactions = new List<TransactionResponse>();
+            List<TransactionResponse> transactionsInCategory = new List<TransactionResponse>();
 
             int count = 10;
             int from = 0;
@@ -363,9 +390,9 @@ namespace Tumba.CanLindaControl.Services
                 {
                     lastTransactionTime = GetTransactionTime(trans.Time);
                     if (lastTransactionTime.LocalDateTime.Date >= localXDaysAgo && 
-                        trans.Category.Equals("generate", StringComparison.InvariantCultureIgnoreCase))
+                        trans.Category.Equals(category, StringComparison.InvariantCultureIgnoreCase))
                     {
-                        stakingTransactions.Add(trans);
+                        transactionsInCategory.Add(trans);
                     }
                 }
 
@@ -377,12 +404,12 @@ namespace Tumba.CanLindaControl.Services
                 from += count;
             }
 
-            return stakingTransactions;
+            return transactionsInCategory;
         }
 
         public DateTimeOffset GetTransactionTime(long time)
         {
-            DateTime epoch = new DateTime(1970, 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
             DateTime transactionTime = epoch.AddSeconds(time);
 
             return new DateTimeOffset(transactionTime);
