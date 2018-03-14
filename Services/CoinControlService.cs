@@ -186,7 +186,7 @@ namespace Tumba.CanLindaControl.Services
             }
             
             DateTimeOffset transactionTime = GetTransactionTime(time);
-            TimeSpan stakingDiff = transactionTime.UtcDateTime.AddDays(1) - DateTime.UtcNow;
+            TimeSpan stakingDiff = transactionTime.UtcDateTime.AddHours(24) - DateTime.UtcNow;
             if (stakingDiff.TotalSeconds > 0)
             {
                 MessageService.Info(string.Format("Expected time to start staking: {0} hours {1} minutes.", stakingDiff.Hours, stakingDiff.Minutes));
