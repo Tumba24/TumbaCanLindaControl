@@ -30,6 +30,40 @@ namespace Tumba.CanLindaControl.Services
             MessageService = messageService;
         }
 
+        private bool CheckStakingRewards()
+        {
+            List<TransactionResponse> stakingTransactions = GetStakingTransactions(30);
+            if (stakingTransactions == null)
+            {
+                return false;
+            }
+
+            if (stakingTransactions.Count < 1)
+            {
+                MessageService.Info("Rewards: No rewards received.");
+                return true;
+            }
+
+            decimal rewardTotals = 0;
+            foreach (TransactionResponse trans in stakingTransactions)
+            {
+                rewardTotals += trans.Amount;
+            }
+
+            DateTimeOffset nowDate = DateTimeOffset.Now.Date;
+            DateTimeOffset oldestTransactionDate = GetTransactionTime(stakingTransactions[stakingTransactions.Count - 1].Time).LocalDateTime.Date;
+
+            TimeSpan diff = nowDate - oldestTransactionDate;
+
+            MessageService.Info(string.Format(
+                "Rewards: {0} LINDA over {1} days = {2} LINDA per day.",
+                Math.Round(rewardTotals, 4),
+                Math.Ceiling(diff.TotalDays),
+                Math.Round(rewardTotals / (decimal)diff.TotalDays, 4)));
+
+            return true;
+        }
+
         private bool CheckStakingInfo()
         {
             string errorMessage;
@@ -113,11 +147,9 @@ namespace Tumba.CanLindaControl.Services
                     }
                 }
             }
-
-            DateTime epoch = new DateTime(1970, 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            DateTime transactionTime = epoch.AddSeconds(time);
-
-            TimeSpan stakingDiff = transactionTime.AddDays(1) - DateTime.UtcNow;
+            
+            DateTimeOffset transactionTime = GetTransactionTime(time);
+            TimeSpan stakingDiff = transactionTime.UtcDateTime.AddDays(1) - DateTime.UtcNow;
             if (stakingDiff.TotalSeconds > 0)
             {
                 MessageService.Info(string.Format("Expected time to start staking: {0} hours {1} minutes.", stakingDiff.Hours, stakingDiff.Minutes));
@@ -179,7 +211,13 @@ namespace Tumba.CanLindaControl.Services
                 return;
             }
 
-            List<UnspentResponse> unspentInNeedOfCoinControl = GetUnspentInNeedOfCoinControl();
+            if (!CheckStakingRewards())
+            {
+                return;
+            }
+
+            List<UnspentResponse> unspentInNeedOfCoinControl = GetUnSpentInNeedOfCoinControl();
+
             if (unspentInNeedOfCoinControl.Count < 2)
             {
                 return;
@@ -258,7 +296,66 @@ namespace Tumba.CanLindaControl.Services
             return info.Fee;
         }
 
-        private List<UnspentResponse> GetUnspentInNeedOfCoinControl()
+        private List<TransactionResponse> GetStakingTransactions(int numberOfDays)
+        {
+            DateTimeOffset localNowDate = DateTimeOffset.Now.Date;
+            DateTimeOffset localXDaysAgo = localNowDate.AddDays(numberOfDays * -1);
+
+            List<TransactionResponse> stakingTransactions = new List<TransactionResponse>();
+
+            int count = 10;
+            int from = 0;
+
+            DateTimeOffset lastTransactionTime = DateTimeOffset.UtcNow;
+            while (lastTransactionTime.LocalDateTime.Date >= localXDaysAgo)
+            {
+                string errorMessage;
+                ListTransactionsRequest listRequest = new ListTransactionsRequest()
+                {
+                    Account = m_accountToCoinControl,
+                    Count = count,
+                    From = from
+                };
+
+                List<TransactionResponse> transactions;
+                if (!m_dataConnector.TryPost<List<TransactionResponse>>(listRequest, out transactions, out errorMessage))
+                {
+                    MessageService.PostError(listRequest, errorMessage);
+                    return null;
+                }
+
+                transactions.Reverse();
+
+                foreach (TransactionResponse trans in transactions)
+                {
+                    lastTransactionTime = GetTransactionTime(trans.Time);
+                    if (lastTransactionTime.LocalDateTime.Date >= localXDaysAgo && 
+                        trans.Category.Equals("generate", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        stakingTransactions.Add(trans);
+                    }
+                }
+
+                if (transactions.Count < count)
+                {
+                    break;
+                }
+
+                from += count;
+            }
+
+            return stakingTransactions;
+        }
+
+        public DateTimeOffset GetTransactionTime(long time)
+        {
+            DateTime epoch = new DateTime(1970, 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            DateTime transactionTime = epoch.AddSeconds(time);
+
+            return new DateTimeOffset(transactionTime);
+        }
+
+        private List<UnspentResponse> GetUnSpentInNeedOfCoinControl()
         {
             string errorMessage;
             ListUnspentRequest unspentRequest = new ListUnspentRequest();

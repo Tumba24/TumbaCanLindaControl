@@ -20,5 +20,8 @@ namespace Tumba.CanLindaControl.Model.Linda.Responses
         [JsonProperty("confirmations")]
         public long Confirmations { get; set; }  
 
+        [JsonProperty("time")]
+        public long Time { get; set; }
+
     }
 }
