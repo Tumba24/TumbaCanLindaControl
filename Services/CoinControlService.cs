@@ -30,6 +30,43 @@ namespace Tumba.CanLindaControl.Services
             MessageService = messageService;
         }
 
+        private bool CheckIfCoinControlIsNeeded(List<UnspentResponse> unspentInNeedOfCoinControl)
+        {
+            foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
+            {
+                if (unspent.Confirmations < DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL)
+                {
+                    MessageService.Info(string.Format(
+                        "Coin control status: Waiting for more confirmations - {0}/{1} {2} LINDA {3}",
+                        unspent.Confirmations,
+                        DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL,
+                        unspent.Amount,
+                        unspent.TransactionId));
+
+                    return false;
+                }
+            }
+
+            if (!CheckStakingInfo())
+            {
+                return false;
+            }
+
+            if (unspentInNeedOfCoinControl.Count < 1)
+            {
+                MessageService.Info("Coin control status: Not ready - No unspent transactions.");
+                return false;
+            }
+            else if (unspentInNeedOfCoinControl.Count == 1)
+            {
+                MessageService.Info("Coin control status: Not ready - Only one unspent transaction.");
+                return false;
+            }
+
+            MessageService.Info("Coin control status: starting...");
+            return true;
+        }
+
         private bool CheckStakingRewards()
         {
             List<TransactionResponse> stakingTransactions = GetStakingTransactions(30);
@@ -206,11 +243,6 @@ namespace Tumba.CanLindaControl.Services
                 return;
             }
 
-            if (!CheckStakingInfo())
-            {
-                return;
-            }
-
             if (!CheckStakingRewards())
             {
                 return;
@@ -222,33 +254,10 @@ namespace Tumba.CanLindaControl.Services
                 return;
             }
 
-            foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
+            if (!CheckIfCoinControlIsNeeded(unspentInNeedOfCoinControl))
             {
-                if (unspent.Confirmations < DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL)
-                {
-                    MessageService.Info(string.Format(
-                        "Coin control status: Waiting for more confirmations - {0}/{1} {2} LINDA {3}",
-                        unspent.Confirmations,
-                        DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL,
-                        unspent.Amount,
-                        unspent.TransactionId));
-
-                    return;
-                }
-            }
-
-            if (unspentInNeedOfCoinControl.Count < 1)
-            {
-                MessageService.Info("Coin control status: Not ready - No unspent transactions.");
                 return;
             }
-            else if (unspentInNeedOfCoinControl.Count == 1)
-            {
-                MessageService.Info("Coin control status: Not ready - Only one unspent transaction.");
-                return;
-            }
-
-            MessageService.Info("Coin control status: starting...");
 
             decimal amount = GetAmount(unspentInNeedOfCoinControl);
             decimal fee = GetFee();
