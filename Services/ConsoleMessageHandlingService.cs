@@ -1,4 +1,5 @@
 using System;
+using Tumba.CanLindaControl.Model.Linda.Requests;
 
 namespace Tumba.CanLindaControl.Services
 {
@@ -40,15 +41,15 @@ namespace Tumba.CanLindaControl.Services
             WriteMessageToConsole("Warning", message);
         }
 
-        public void Debug(string message)
-        {
-            WriteMessageToConsole("Debug", message);
-        }
-
         public void Break()
         {
             Console.WriteLine();
             Console.WriteLine(DateTime.Now.ToString("F"));
+        }
+
+        public void PostError(BaseRequest request, string errorMessage)
+        {
+            Error(string.Format("{0} failed! {1}", request.Method, errorMessage));
         }
     }
 }

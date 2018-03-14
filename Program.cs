@@ -8,12 +8,12 @@ namespace Tumba.CanLindaControl
     {
         public const string USAGE = @"Usage:
 Before using this utility you must run Linda-qt.exe with the following command:
-Linda-qt.exe -server=1 -rpcuser=user -rpcpassword=password -rpcallowip=127.0.0.1 -rpcport=15715
+Linda-qt.exe -server=1 -rpcuser=user -rpcpassword=password -rpcallowip=127.0.0.1 -rpcport=33821
 
 -rpcuser and -rpcpassword should be changed.
 
 Tumba can Linda control command line methods:
-coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {frequencyInMilliseconds}";
+coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {walletpassphrase} {frequencyInMilliseconds}";
 
         public static void Main(string[] args)
         {

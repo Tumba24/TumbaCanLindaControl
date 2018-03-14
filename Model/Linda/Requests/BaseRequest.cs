@@ -15,6 +15,6 @@ namespace Tumba.CanLindaControl.Model.Linda.Requests
         public abstract string Method { get; }
 
         [JsonProperty("params")]
-        public abstract string[] MethodParams { get; }
+        public abstract object[] MethodParams { get; }
     }
 }

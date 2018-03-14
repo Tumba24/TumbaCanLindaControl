@@ -1,0 +1,8 @@
+2 transactons
+1064588.38000000 + 1064588.39326499 = 2129176.77326499
+
+Linda Coin Control Features
+Quantity: 2 Amount: 2129176.77326499 LINDA
+Fee: 0.01 After Fee: 2129176.76326499 LINDA
+Bytes: ~374 Priority: highest
+Low Output: no Change 0.00 LINDA

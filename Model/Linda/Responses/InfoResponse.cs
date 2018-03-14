@@ -7,5 +7,8 @@ namespace Tumba.CanLindaControl.Model.Linda.Responses
     {
         [JsonProperty("version")]
         public string Version { get; set; }
+
+        [JsonProperty("paytxfee")]
+        public decimal Fee { get; set; }
     }
 }

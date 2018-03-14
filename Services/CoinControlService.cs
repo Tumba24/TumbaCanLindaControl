@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -11,10 +13,12 @@ namespace Tumba.CanLindaControl.Services
     public class CoinControlService : IDisposable
     {
         public const string COMPATIBLE_WALLET_VERSIONS = "v1.0.1.3-g";
+        public const int DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL = 10;
         public const int DEFAULT_FREQUENCY = 60000; // 1 minute
 
         private LindaDataConnector m_dataConnector;
         private string m_accountToCoinControl;
+        private string m_walletPassphrase;
         private System.Timers.Timer m_timer;
         private object m_coinControlLock = new object();
 
@@ -26,15 +30,10 @@ namespace Tumba.CanLindaControl.Services
             MessageService = messageService;
         }
 
-        public void DoCoinControl()
+        private bool CheckStakingInfo()
         {
-            MessageService.Break();
-
-            // TODO make sure wallet is unlocked for staking.
-            MessageService.Info(string.Format("Account: {0}.", m_accountToCoinControl));
-
             string errorMessage;
-            Tumba.CanLindaControl.Model.Linda.Requests.
+
             StakingInfoRequest stakingInfoRequest = new StakingInfoRequest();
             StakingInfoResponse stakingInfoResponse;
             if (!m_dataConnector.TryPost<StakingInfoResponse>(
@@ -42,8 +41,8 @@ namespace Tumba.CanLindaControl.Services
                 out stakingInfoResponse,
                 out errorMessage))
             {
-                MessageService.Error(string.Format("{0} failed!", stakingInfoRequest.Method));
-                return;
+                MessageService.PostError(stakingInfoRequest, errorMessage);
+                return false;
             }
 
             if (!stakingInfoResponse.Enabled)
@@ -65,48 +64,10 @@ namespace Tumba.CanLindaControl.Services
                 MessageService.Error(string.Format("Staking errors found: {0}", stakingInfoResponse.Errors));
             }
 
-            ListUnspentRequest unspentRequest = new ListUnspentRequest();
-            List<UnspentResponse> unspentResponses;
-            if (!m_dataConnector.TryPost<List<UnspentResponse>>(
-                unspentRequest, 
-                out unspentResponses, 
-                out errorMessage))
-            {
-                MessageService.Error(string.Format("{0} failed!", unspentRequest.Method));
-                return;
-            }
-
-            decimal amount = 0;
-            string address = null;
-            List<UnspentResponse> unspentForAccount = new List<UnspentResponse>();
-            foreach (UnspentResponse unspent in unspentResponses)
-            {
-                if (unspent.Account != null && 
-                    unspent.Account.Equals(m_accountToCoinControl, StringComparison.InvariantCultureIgnoreCase))
-                {
-                    amount += unspent.Amount;
-                    address = unspent.Address;
-                    unspentForAccount.Add(unspent);
-                }
-            }
-
-            if (unspentForAccount.Count < 1)
-            {
-                MessageService.Error("No unspent transactions!");
-                return;
-            }
-
-            if (unspentForAccount.Count == 1)
-            {
-                MessageService.Info("Only one unspent transaction.");
-                MessageService.Info("No need for coin control.");
-                return;
-            }
-
-            MessageService.Info("Coin control needed.  Starting...");
+            return  true;
         }
 
-        public void Start()
+        private bool CheckWalletCompaitibility()
         {
             InfoResponse info;
             InfoRequest requestForInfo = new InfoRequest();
@@ -117,7 +78,7 @@ namespace Tumba.CanLindaControl.Services
             if (!m_dataConnector.TryPost<InfoResponse>(requestForInfo, out info, out errorMessage))
             {
                 MessageService.Fail(errorMessage);
-                return;
+                return false;
             }
 
             MessageService.Info("Linda wallet info retrieved!");
@@ -133,60 +94,63 @@ namespace Tumba.CanLindaControl.Services
                     "See compatible versions: {0}",
                     COMPATIBLE_WALLET_VERSIONS));
                 
-                return;
-            }
-
-            MessageService.Info("Wallet compatibility check complete!");
-
-            DoCoinControl();
-
-            MessageService.Info(string.Format("Coin control set to run every {0} milliseconds.", FrequencyInMilliSeconds));
-            m_timer.Start();
-        }
-
-        public bool TryParseArgs(string[] args, out string errorMessage)
-        {
-            if (args.Length < 4)
-            {
-                errorMessage = "Missing required parameters.";
                 return false;
             }
 
-            m_dataConnector = new LindaDataConnector(args[1].Trim(), args[2].Trim()); // user, password
-            m_accountToCoinControl = args[3].Trim();
-            FrequencyInMilliSeconds = DEFAULT_FREQUENCY;
+            MessageService.Info("Wallet compatibility check complete!");
+            return true;
+        }
 
-            int tmpFrequency;
-            if (args.Length >= 5 && Int32.TryParse(args[4], out tmpFrequency))
+        private void DoCoinControl()
+        {
+            MessageService.Break();
+            MessageService.Info(string.Format("Account: {0}.", m_accountToCoinControl));
+
+            if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true))
             {
-                FrequencyInMilliSeconds = tmpFrequency;
+                return;
             }
 
-            m_timer = new System.Timers.Timer();
-            m_timer.AutoReset = false;
-            m_timer.Enabled = true;
-            m_timer.Interval = FrequencyInMilliSeconds;
-            m_timer.Elapsed += (sender, eventArgs) =>
+            if (!CheckStakingInfo())
             {
-                lock(m_coinControlLock)
-                {
-                    try
-                    {
-                        DoCoinControl();
-                        if (m_timer != null)
-                        {
-                            m_timer.Start();
-                        }
-                    }
-                    catch (Exception exception)
-                    {
-                        MessageService.Fail(string.Format("Coin control failed!  See exception: {0}", exception));
-                    }
-                }
-            };
+                return;
+            }
 
-            errorMessage = null;
-            return true;
+            List<UnspentResponse> unspentInNeedOfCoinControl = GetUnspentInNeedOfCoinControl();
+            if (unspentInNeedOfCoinControl.Count < 2)
+            {
+                return;
+            }
+
+            MessageService.Info("Coin control needed.  Starting...");
+
+            decimal amount = GetAmount(unspentInNeedOfCoinControl);
+            decimal fee = GetFee();
+            if (fee < 0)
+            {
+                return;
+            }
+
+            decimal amountAfterFee = amount - fee;
+            MessageService.Info(string.Format("Amount After Fee: {0} LINDA.", amountAfterFee));
+
+            if (!TryUnlockWallet(5, false))
+            {
+                return;
+            }
+
+            if (!TrySendFrom(
+                m_accountToCoinControl,
+                unspentInNeedOfCoinControl[0].Address,
+                amountAfterFee))
+            {
+                return;
+            }
+
+            TryUnlockWallet(FrequencyInMilliSeconds * 3, true);
+
+            MessageService.Info("Wallet unlocked for staking.");
+            MessageService.Info("Coin control complete!");
         }
 
         public void Dispose()
@@ -199,6 +163,84 @@ namespace Tumba.CanLindaControl.Services
                     m_timer = null;
                 }
             }
+        }
+
+        private decimal GetAmount(List<UnspentResponse> unspentInNeedOfCoinControl)
+        {
+            decimal amount = 0;
+            string address = unspentInNeedOfCoinControl[0].Address;
+            foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
+            {
+                amount += unspent.Amount;
+            }
+
+            MessageService.Info(string.Format("Amount: {0} LINDA.", amount));
+
+            return amount;
+        }
+
+        private decimal GetFee()
+        {
+            string errorMessage;
+            InfoRequest requestForInfo = new InfoRequest();
+            InfoResponse info;
+            if (!m_dataConnector.TryPost<InfoResponse>(requestForInfo, out info, out errorMessage))
+            {
+                MessageService.PostError(requestForInfo, errorMessage);
+                return -1;
+            }
+            
+            MessageService.Info(string.Format("Fee: {0} LINDA.", info.Fee));
+
+            return info.Fee;
+        }
+
+        private List<UnspentResponse> GetUnspentInNeedOfCoinControl()
+        {
+            string errorMessage;
+            ListUnspentRequest unspentRequest = new ListUnspentRequest();
+            List<UnspentResponse> unspentResponses;
+            if (!m_dataConnector.TryPost<List<UnspentResponse>>(
+                unspentRequest, 
+                out unspentResponses, 
+                out errorMessage))
+            {
+                MessageService.PostError(unspentRequest, errorMessage);
+                return new List<UnspentResponse>();
+            }
+
+            List<UnspentResponse> unspentForAccount = new List<UnspentResponse>();
+            foreach (UnspentResponse unspent in unspentResponses)
+            {
+                if (unspent.Account != null && 
+                    unspent.Account.Equals(m_accountToCoinControl, StringComparison.InvariantCultureIgnoreCase))
+                {
+                    if (unspent.Confirmations < DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL)
+                    {
+                        MessageService.Info(string.Format(
+                            "Waiting for more confirmations: {0}/{1} {2} LINDA {3}",
+                            unspent.Confirmations,
+                            DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL,
+                            unspent.Amount,
+                            unspent.TransactionId));
+
+                        return unspentResponses;
+                    }
+
+                    unspentForAccount.Add(unspent);
+                }
+            }
+
+            if (unspentForAccount.Count < 1)
+            {
+                MessageService.Info("No unspent transactions.");
+            }
+            else if (unspentForAccount.Count == 1)
+            {
+                MessageService.Info("Only one unspent transaction.");
+            }
+
+            return unspentForAccount;
         }
 
         public static void Run(string[] args)
@@ -223,6 +265,115 @@ namespace Tumba.CanLindaControl.Services
                     wait.WaitOne();
                 }
             }
+        }
+
+        private void Start()
+        {
+            if (!CheckWalletCompaitibility())
+            {
+                return;
+            }
+
+            // Attempt 2 unlocks to work around a wallet bug where the first unlock for staking only seems to unlock the whole wallet.
+            if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true || 
+                !TryUnlockWallet(FrequencyInMilliSeconds * 3, true)))
+            {
+                return;
+            }
+
+            DoCoinControl();
+
+            MessageService.Info(string.Format("Coin control set to run every {0} milliseconds.", FrequencyInMilliSeconds));
+            m_timer.Start();
+        }
+
+        private bool TryParseArgs(string[] args, out string errorMessage)
+        {
+            if (args.Length < 5)
+            {
+                errorMessage = "Missing required parameters.";
+                return false;
+            }
+
+            m_dataConnector = new LindaDataConnector(args[1].Trim(), args[2].Trim()); // user, password
+            m_accountToCoinControl = args[3].Trim();
+            m_walletPassphrase = args[4].Trim();
+            FrequencyInMilliSeconds = DEFAULT_FREQUENCY;
+
+            int tmpFrequency;
+            if (args.Length >= 6 && Int32.TryParse(args[5], out tmpFrequency))
+            {
+                FrequencyInMilliSeconds = tmpFrequency;
+            }
+
+            m_timer = new System.Timers.Timer();
+            m_timer.AutoReset = false;
+            m_timer.Interval = FrequencyInMilliSeconds;
+            m_timer.Elapsed += (sender, eventArgs) =>
+            {
+                lock(m_coinControlLock)
+                {
+                    try
+                    {
+                        DoCoinControl();
+                        if (m_timer != null)
+                        {
+                            m_timer.Start();
+                        }
+                    }
+                    catch (Exception exception)
+                    {
+                        MessageService.Fail(string.Format("Coin control failed!  See exception: {0}", exception));
+                    }
+                }
+            };
+
+            errorMessage = null;
+            return true;
+        }
+
+        private bool TrySendFrom(string fromAccount, string toAddress, decimal amountAfterFee)
+        {
+            SendFromRequest sendRequest = new SendFromRequest()
+            {
+                FromAccount = m_accountToCoinControl,
+                ToAddress = toAddress,
+                AmountAfterFee = amountAfterFee
+            };
+
+            string errorMessage;
+            string transactionId;
+            if (!m_dataConnector.TryPost<string>(sendRequest, out transactionId, out errorMessage))
+            {
+                MessageService.PostError(sendRequest, errorMessage);
+                return false;
+            }
+
+            MessageService.Info(string.Format("Coin control transaction sent: {0}.", transactionId));
+            return true;
+        }
+
+        private bool TryUnlockWallet(int timeout, bool forStakingOnly)
+        {
+            string lockError, errorMessage;
+
+            WalletPassphraseRequest unlockRequest = new WalletPassphraseRequest(m_walletPassphrase);
+            unlockRequest.StakingOnly = forStakingOnly;
+            unlockRequest.TimeoutInSeconds = timeout;
+            if (!m_dataConnector.TryPost<string>(unlockRequest, out lockError, out errorMessage))
+            {
+                MessageService.Error("Failed to unlock wallet!  Is the passphrase correct?");
+                MessageService.PostError(unlockRequest, errorMessage);
+                return false;
+            }
+
+            if (!string.IsNullOrEmpty(lockError))
+            {
+                MessageService.Error(string.Format("Unlock request returned error: {0}", lockError));
+                return false;
+            }
+
+            return true;
         }
     }
 }

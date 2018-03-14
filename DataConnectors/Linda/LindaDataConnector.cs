@@ -24,7 +24,7 @@ namespace Tumba.CanLindaControl.DataConnectors.Linda
 
         public bool TryPost<T>(BaseRequest requestObj, out T responseObj, out string errorMessage)
         {
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create("http://localhost:15715");
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create("http://localhost:33821");
             request.Credentials = new NetworkCredential(m_rpcUser, m_rpcPassword);
             request.ContentType = "application/json-rpc";
             request.Method = "POST";
@@ -61,10 +61,22 @@ namespace Tumba.CanLindaControl.DataConnectors.Linda
                 return false;
             }
 
+            JObject rawResponse = JObject.Parse(responseObjStr);
+            JToken errorToken = rawResponse.GetValue("error");
+            if (errorToken != null)
+            {
+                errorMessage = errorToken.ToObject<string>();
+                if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    responseObj = default(T);
+                    return false;
+                }
+            }
+
             try
             {
-                JObject rawResponse = JObject.Parse(responseObjStr);
-                responseObj = JsonConvert.DeserializeObject<T>(rawResponse.GetValue("result").ToString());
+                JToken resultToken = rawResponse.GetValue("result");
+                responseObj = resultToken.ToObject<T>();
             }
             catch (Exception exception)
             {
