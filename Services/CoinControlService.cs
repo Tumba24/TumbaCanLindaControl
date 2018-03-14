@@ -58,13 +58,76 @@ namespace Tumba.CanLindaControl.Services
                 TimeSpan timeSpan = TimeSpan.FromSeconds(stakingInfoResponse.ExpectedTimeInSeconds);
                 MessageService.Info(string.Format("Expected time to earn reward: {0} days {1} hours.", timeSpan.Days, timeSpan.Hours));
             }
+            else
+            {
+                if (!CheckExpectedTimeToStartStaking())
+                {
+                    return false;
+                }
+            }
 
             if (!string.IsNullOrEmpty(stakingInfoResponse.Errors))
             {
                 MessageService.Error(string.Format("Staking errors found: {0}", stakingInfoResponse.Errors));
             }
 
-            return  true;
+            return true;
+        }
+
+        private bool CheckExpectedTimeToStartStaking()
+        {
+            string errorMessage;
+            ListUnspentRequest unspentRequest = new ListUnspentRequest();
+            List<UnspentResponse> unspentResponses;
+            if (!m_dataConnector.TryPost<List<UnspentResponse>>(
+                unspentRequest, 
+                out unspentResponses, 
+                out errorMessage))
+            {
+                MessageService.PostError(unspentRequest, errorMessage);
+                return false;
+            }
+
+            long time = 0;
+            foreach (UnspentResponse unspent in unspentResponses)
+            {
+                if (unspent.Account != null && 
+                    unspent.Account.Equals(m_accountToCoinControl, StringComparison.InvariantCultureIgnoreCase) &&
+                    unspent.Confirmations >= DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL)
+                {
+                    GetTransactionRequest transRequest = new GetTransactionRequest()
+                    {
+                        TransactionId = unspent.TransactionId
+                    };
+                    
+                    GetTransactionResponse transResponse;
+                    if (!m_dataConnector.TryPost(transRequest, out transResponse, out errorMessage))
+                    {
+                        MessageService.PostError(transRequest, errorMessage);
+                        return false;
+                    }
+
+                    if (transResponse.Time > time)
+                    {
+                        time = transResponse.Time;
+                    }
+                }
+            }
+
+            DateTime epoch = new DateTime(1970, 1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            DateTime transactionTime = epoch.AddSeconds(time);
+
+            TimeSpan stakingDiff = transactionTime.AddDays(1) - DateTime.UtcNow;
+            if (stakingDiff.TotalSeconds > 0)
+            {
+                MessageService.Info(string.Format("Expected time to start staking: {0} hours {1} minutes.", stakingDiff.Hours, stakingDiff.Minutes));
+            }
+            else
+            {
+                MessageService.Warning("You should have already started staking!  Please troubleshoot your wallet.");
+            }
+
+            return true;
         }
 
         private bool CheckWalletCompaitibility()
