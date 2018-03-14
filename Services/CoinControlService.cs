@@ -217,13 +217,38 @@ namespace Tumba.CanLindaControl.Services
             }
 
             List<UnspentResponse> unspentInNeedOfCoinControl = GetUnSpentInNeedOfCoinControl();
-
-            if (unspentInNeedOfCoinControl.Count < 2)
+            if (unspentInNeedOfCoinControl == null)
             {
                 return;
             }
 
-            MessageService.Info("Coin control needed.  Starting...");
+            foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
+            {
+                if (unspent.Confirmations < DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL)
+                {
+                    MessageService.Info(string.Format(
+                        "Coin control status: Waiting for more confirmations - {0}/{1} {2} LINDA {3}",
+                        unspent.Confirmations,
+                        DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL,
+                        unspent.Amount,
+                        unspent.TransactionId));
+
+                    return;
+                }
+            }
+
+            if (unspentInNeedOfCoinControl.Count < 1)
+            {
+                MessageService.Info("Coin control status: Not ready - No unspent transactions.");
+                return;
+            }
+            else if (unspentInNeedOfCoinControl.Count == 1)
+            {
+                MessageService.Info("Coin control status: Not ready - Only one unspent transaction.");
+                return;
+            }
+
+            MessageService.Info("Coin control status: starting...");
 
             decimal amount = GetAmount(unspentInNeedOfCoinControl);
             decimal fee = GetFee();
@@ -250,8 +275,7 @@ namespace Tumba.CanLindaControl.Services
 
             TryUnlockWallet(FrequencyInMilliSeconds * 3, true);
 
-            MessageService.Info("Wallet unlocked for staking.");
-            MessageService.Info("Coin control complete!");
+            MessageService.Info("Coin control status: complete!");
         }
 
         public void Dispose()
@@ -366,7 +390,7 @@ namespace Tumba.CanLindaControl.Services
                 out errorMessage))
             {
                 MessageService.PostError(unspentRequest, errorMessage);
-                return new List<UnspentResponse>();
+                return null;
             }
 
             List<UnspentResponse> unspentForAccount = new List<UnspentResponse>();
@@ -375,29 +399,8 @@ namespace Tumba.CanLindaControl.Services
                 if (unspent.Account != null && 
                     unspent.Account.Equals(m_accountToCoinControl, StringComparison.InvariantCultureIgnoreCase))
                 {
-                    if (unspent.Confirmations < DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL)
-                    {
-                        MessageService.Info(string.Format(
-                            "Waiting for more confirmations: {0}/{1} {2} LINDA {3}",
-                            unspent.Confirmations,
-                            DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL,
-                            unspent.Amount,
-                            unspent.TransactionId));
-
-                        return unspentResponses;
-                    }
-
                     unspentForAccount.Add(unspent);
                 }
-            }
-
-            if (unspentForAccount.Count < 1)
-            {
-                MessageService.Info("No unspent transactions.");
-            }
-            else if (unspentForAccount.Count == 1)
-            {
-                MessageService.Info("Only one unspent transaction.");
             }
 
             return unspentForAccount;
