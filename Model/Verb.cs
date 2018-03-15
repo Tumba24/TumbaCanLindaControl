@@ -2,7 +2,7 @@ using System;
 
 namespace Tumba.CanLindaControl.Model
 {
-    public enum Method
+    public enum Verb
     {
         CoinControl
     }
