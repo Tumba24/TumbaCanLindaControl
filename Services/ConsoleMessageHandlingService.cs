@@ -5,11 +5,7 @@ namespace Tumba.CanLindaControl.Services
 {
     public class ConsoleMessageHandlingService
     {
-        public Action FailCallback { get; private set; }
-        public ConsoleMessageHandlingService(Action failCallback)
-        {
-            FailCallback = failCallback;
-        }
+        public event EventHandler FailCallback;
 
         public static void WriteMessageToConsole(string type, string message)
         {
@@ -30,9 +26,10 @@ namespace Tumba.CanLindaControl.Services
         {
             WriteMessageToConsole("Fail", message);
 
-            if (FailCallback != null)
+            EventHandler handler = FailCallback;
+            if (handler != null)
             {
-                FailCallback();
+                handler.Invoke(this, EventArgs.Empty);
             }
         }
 

@@ -2,7 +2,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.Threading;
 using System.Timers;
 using Tumba.CanLindaControl.DataConnectors.Linda;
 using Tumba.CanLindaControl.Model.Linda.Requests;
@@ -10,7 +9,7 @@ using Tumba.CanLindaControl.Model.Linda.Responses;
 
 namespace Tumba.CanLindaControl.Services
 {
-    public class CoinControlService : IDisposable
+    public class CoinControlService : IDisposable, IRunnable
     {
         public const string COMPATIBLE_WALLET_VERSIONS = "v1.0.1.3-g";
         public const int DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL = 10;
@@ -19,7 +18,7 @@ namespace Tumba.CanLindaControl.Services
         private LindaDataConnector m_dataConnector;
         private string m_accountToCoinControl;
         private string m_walletPassphrase;
-        private System.Timers.Timer m_timer;
+        private Timer m_timer;
         private object m_coinControlLock = new object();
 
         public int FrequencyInMilliSeconds { get; private set; }
@@ -442,28 +441,26 @@ namespace Tumba.CanLindaControl.Services
             return unspentForAccount;
         }
 
-        public static void Run(string[] args)
+        public bool Run(string[] args, out string errorMessage)
         {
-            using (ManualResetEvent wait = new ManualResetEvent(false))
+            using (System.Threading.ManualResetEvent wait = new System.Threading.ManualResetEvent(false))
             {
-                ConsoleMessageHandlingService messageHandler = new ConsoleMessageHandlingService(() =>
+                MessageService.FailCallback += (sender, eventArgs) =>
                 {
                     wait.Set();
-                });
+                };
 
-                using (CoinControlService service = new CoinControlService(messageHandler))
+                if (!TryParseArgs(args, out errorMessage))
                 {
-                    string errorMessage;
-                    if (!service.TryParseArgs(args, out errorMessage))
-                    {
-                        Console.WriteLine(errorMessage);
-                        Environment.Exit(-2);
-                    }
-                    service.Start();
-
-                    wait.WaitOne();
+                    return false;
                 }
+
+                Start();
+
+                wait.WaitOne();
             }
+
+            return true;
         }
 
         private void Start()
@@ -505,7 +502,7 @@ namespace Tumba.CanLindaControl.Services
                 FrequencyInMilliSeconds = tmpFrequency;
             }
 
-            m_timer = new System.Timers.Timer();
+            m_timer = new Timer();
             m_timer.AutoReset = false;
             m_timer.Interval = FrequencyInMilliSeconds;
             m_timer.Elapsed += (sender, eventArgs) =>

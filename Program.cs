@@ -12,7 +12,7 @@ Linda-qt.exe -server=1 -rpcuser=user -rpcpassword=password -rpcallowip=127.0.0.1
 
 -rpcuser and -rpcpassword should be changed.
 
-Tumba can Linda control command line methods:
+Tumba can Linda control command line verb examples:
 coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {walletpassphrase} {frequencyInMilliseconds}";
 
         public static void Main(string[] args)
@@ -33,15 +33,25 @@ coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {walletpassphrase} {f
                 Environment.Exit(-1);
             }
 
+            ConsoleMessageHandlingService messageService = new ConsoleMessageHandlingService();
+
             // TODO: Add a verb for handling master node earnings.
+            IRunnable runnable;
             switch (verb)
             {
                 case Verb.CoinControl:
                 default:
                 {
-                    CoinControlService.Run(args);
+                    runnable = new CoinControlService(messageService);
                     break;
                 }
+            }
+
+            string errorMessage;
+            if (!runnable.Run(args, out errorMessage))
+            {
+                Console.WriteLine("Run failed!  See error: {0}", errorMessage);
+                Environment.Exit(-2);
             }
         }
     }
