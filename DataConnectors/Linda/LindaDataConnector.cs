@@ -46,7 +46,14 @@ namespace Tumba.CanLindaControl.DataConnectors.Linda
                     using (Stream responseStream = response.GetResponseStream())
                     {
                         byte[] responseObjData = new byte[response.ContentLength];
-                        responseStream.Read(responseObjData, 0, responseObjData.Length);
+                        
+                        int totalBytesRead = 0;
+                        while (totalBytesRead < response.ContentLength)
+                        {
+                            int bytesRead = responseStream.Read(responseObjData, totalBytesRead, responseObjData.Length - totalBytesRead);
+                            totalBytesRead += bytesRead;
+                        }
+                        
                         responseObjStr = Encoding.UTF8.GetString(responseObjData);
                     }
                 }
