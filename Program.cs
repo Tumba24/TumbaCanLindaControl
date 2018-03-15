@@ -26,17 +26,17 @@ coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {walletpassphrase} {f
                 return;
             }
 
-            Method method;
-            if (!Enum.TryParse<Method>(args[0], true, out method))
+            Verb verb;
+            if (!Enum.TryParse<Verb>(args[0], true, out verb))
             {
                 Console.WriteLine("Specified method not recognized!");
                 Environment.Exit(-1);
             }
 
-            // TODO: Add a method for handling master node earnings.
-            switch (method)
+            // TODO: Add a verb for handling master node earnings.
+            switch (verb)
             {
-                case Method.CoinControl:
+                case Verb.CoinControl:
                 default:
                 {
                     CoinControlService.Run(args);
