@@ -29,7 +29,7 @@ coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {walletpassphrase} {f
             Verb verb;
             if (!Enum.TryParse<Verb>(args[0], true, out verb))
             {
-                Console.WriteLine("Specified method not recognized!");
+                Console.WriteLine("Specified verb not recognized!");
                 Environment.Exit(-1);
             }
 
