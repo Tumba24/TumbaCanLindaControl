@@ -9,7 +9,7 @@ namespace Tumba.CanLindaControl.Model.Linda.Requests
         public string JsonRpc { get { return "1.0"; } }
 
         [JsonProperty("id")]
-        public int Id { get; set; }
+        public string Id { get; set; }
 
         [JsonProperty("method")]
         public abstract string Method { get; }

@@ -13,13 +13,10 @@ namespace Tumba.CanLindaControl.DataConnectors.Linda
         private string m_rpcUser;
         private string m_rpcPassword;
 
-        public int NextRequestId { get; private set; }
-
         public LindaDataConnector(string rpcUser, string rpcPassword)
         {
             m_rpcUser = rpcUser;
             m_rpcPassword = rpcPassword;
-            NextRequestId = 1;
         }
 
         public bool TryPost<T>(BaseRequest requestObj, out T responseObj, out string errorMessage)
@@ -29,7 +26,7 @@ namespace Tumba.CanLindaControl.DataConnectors.Linda
             request.ContentType = "application/json-rpc";
             request.Method = "POST";
 
-            requestObj.Id = NextRequestId++;
+            requestObj.Id = Guid.NewGuid().ToString();
 
             string requestObjStr = JsonConvert.SerializeObject(requestObj);
             byte[] requestObjData = Encoding.UTF8.GetBytes(requestObjStr);
