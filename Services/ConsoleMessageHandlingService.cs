@@ -22,15 +22,19 @@ namespace Tumba.CanLindaControl.Services
             WriteMessageToConsole("Error", message);
         }
 
-        public void Fail(string message)
+        public void Fail()
         {
-            WriteMessageToConsole("Fail", message);
-
             EventHandler handler = FailCallback;
             if (handler != null)
             {
                 handler.Invoke(this, EventArgs.Empty);
             }
+        }
+
+        public void Fail(string message)
+        {
+            WriteMessageToConsole("Fail", message);
+            Fail();
         }
 
         public void Warning(string message)

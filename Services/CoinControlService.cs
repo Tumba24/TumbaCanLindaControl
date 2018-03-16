@@ -350,6 +350,29 @@ namespace Tumba.CanLindaControl.Services
             return GetTransactions("immature", numberOfDays);
         }
 
+        private void PromptForWalletPassphrase()
+        {
+            Console.WriteLine("Please enter your wallet's passphrase:");
+
+            m_walletPassphrase = string.Empty;
+
+            ConsoleKeyInfo keyInfo;
+            while ((keyInfo = Console.ReadKey(true)).Key != ConsoleKey.Enter)
+            {
+                if (keyInfo.Key == ConsoleKey.Backspace)
+                {
+                    if (m_walletPassphrase.Length > 0)
+                    {
+                        m_walletPassphrase = m_walletPassphrase.Remove(m_walletPassphrase.Length -1);
+                    }
+                }
+                else
+                {
+                    m_walletPassphrase += keyInfo.KeyChar;
+                }
+            }
+        }
+
         private List<TransactionResponse> GetStakingTransactions(int numberOfDays)
         {
             return GetTransactions("generate", numberOfDays);
@@ -467,6 +490,7 @@ namespace Tumba.CanLindaControl.Services
         {
             if (!CheckWalletCompaitibility())
             {
+                MessageService.Fail();
                 return;
             }
 
@@ -474,6 +498,7 @@ namespace Tumba.CanLindaControl.Services
             if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true || 
                 !TryUnlockWallet(FrequencyInMilliSeconds * 3, true)))
             {
+                MessageService.Fail();
                 return;
             }
 
@@ -485,7 +510,7 @@ namespace Tumba.CanLindaControl.Services
 
         private bool TryParseArgs(string[] args, out string errorMessage)
         {
-            if (args.Length < 5)
+            if (args.Length < 4)
             {
                 errorMessage = "Missing required parameters.";
                 return false;
@@ -493,11 +518,13 @@ namespace Tumba.CanLindaControl.Services
 
             m_dataConnector = new LindaDataConnector(args[1].Trim(), args[2].Trim()); // user, password
             m_accountToCoinControl = args[3].Trim();
-            m_walletPassphrase = args[4].Trim();
+
+            PromptForWalletPassphrase();
+
             FrequencyInMilliSeconds = DEFAULT_FREQUENCY;
 
             int tmpFrequency;
-            if (args.Length >= 6 && Int32.TryParse(args[5], out tmpFrequency))
+            if (args.Length >= 5 && Int32.TryParse(args[4], out tmpFrequency))
             {
                 FrequencyInMilliSeconds = tmpFrequency;
             }
