@@ -9,4 +9,8 @@
     <PackageReference Include="Newtonsoft.Json" Version="11.0.1" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(RuntimeIdentifier)'=='win10-x64'">
+    <Content Include="Scripts\**\*"  CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
