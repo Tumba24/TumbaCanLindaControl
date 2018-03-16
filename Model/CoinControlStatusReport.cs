@@ -8,7 +8,6 @@ namespace Tumba.CanLindaControl.Model
     {
         public TimeSpan ExpectedTimeToEarnReward { get; set; }
         public TimeSpan ExpectedTimeToStartStaking { get; set; }
-        public DateTimeOffset LatestUnspentDateTime { get; set; }
         public DateTimeOffset OldestRewardDateTime { get; set; }
         public decimal RewardTotal { get; set; }
         public bool Staking { get; set; }
@@ -19,7 +18,6 @@ namespace Tumba.CanLindaControl.Model
         {
             ExpectedTimeToEarnReward = TimeSpan.MinValue;
             ExpectedTimeToStartStaking = TimeSpan.MinValue;
-            LatestUnspentDateTime = DateTimeOffset.MinValue;
             OldestRewardDateTime = DateTimeOffset.MinValue;
             RewardTotal = 0;
             Staking = false;
@@ -68,10 +66,12 @@ namespace Tumba.CanLindaControl.Model
                     }
                     else
                     {
-                        TimeSpan stakingDiff = LatestUnspentDateTime.UtcDateTime.AddHours(24) - DateTime.UtcNow;
-                        if (stakingDiff.TotalSeconds > 0)
+                        if (ExpectedTimeToStartStaking.TotalSeconds > 0)
                         {
-                            messageService.Info(string.Format("Expected time to start staking: {0} hours {1} minutes.", stakingDiff.Hours, stakingDiff.Minutes));
+                            messageService.Info(string.Format(
+                                "Expected time to start staking: {0} hours {1} minutes.", 
+                                ExpectedTimeToStartStaking.Hours, 
+                                ExpectedTimeToStartStaking.Minutes));
                         }
                         else
                         {
