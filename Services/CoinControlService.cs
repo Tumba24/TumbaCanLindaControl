@@ -264,8 +264,8 @@ namespace Tumba.CanLindaControl.Services
             }
 
             statusReport.SetStatus(
-                CoinControlStatus.NotReadyNoUnspent,
-                "Not ready - No unspent transactions.");
+                CoinControlStatus.NotReadyWaitingForPaymentToYourself,
+                "Not ready - Waiting for a payment to yourself.");
             
             return statusReport;
         }

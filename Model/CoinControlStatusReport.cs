@@ -21,7 +21,7 @@ namespace Tumba.CanLindaControl.Model
             OldestRewardDateTime = DateTimeOffset.MinValue;
             RewardTotal = 0;
             Staking = false;
-            Status = CoinControlStatus.NotReadyNoUnspent;
+            Status = CoinControlStatus.NotReadyWaitingForPaymentToYourself;
             StatusMessage = null;
         }
 
@@ -55,7 +55,7 @@ namespace Tumba.CanLindaControl.Model
                     messageService.Info(string.Format(
                         "Staking: {0}.",
                         (Staking ? "Yes" : "No")));
-                    
+
                     if (Staking)
                     {
                         messageService.Info(string.Format(
@@ -79,7 +79,7 @@ namespace Tumba.CanLindaControl.Model
                     }
                     break;
                 }
-                case CoinControlStatus.NotReadyNoUnspent:
+                case CoinControlStatus.NotReadyWaitingForPaymentToYourself:
                 case CoinControlStatus.WaitingForStakeToMature:
                 case CoinControlStatus.WaitingForUnspentConfirmations:
                 case CoinControlStatus.Starting:

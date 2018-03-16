@@ -6,7 +6,7 @@ namespace Tumba.CanLindaControl.Model
     {
         Starting,
         NotReadyOneUnspent,
-        NotReadyNoUnspent,
+        NotReadyWaitingForPaymentToYourself,
         WaitingForUnspentConfirmations,
         WaitingForStakeToMature,
     }
