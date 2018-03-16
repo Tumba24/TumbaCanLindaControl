@@ -50,13 +50,12 @@ namespace Tumba.CanLindaControl.Model
 
             switch (Status)
             {
-                case CoinControlStatus.NotReadyNoUnspent:
                 case CoinControlStatus.NotReadyOneUnspent:
                 {
                     messageService.Info(string.Format(
                         "Staking: {0}.",
                         (Staking ? "Yes" : "No")));
-
+                    
                     if (Staking)
                     {
                         messageService.Info(string.Format(
@@ -80,6 +79,7 @@ namespace Tumba.CanLindaControl.Model
                     }
                     break;
                 }
+                case CoinControlStatus.NotReadyNoUnspent:
                 case CoinControlStatus.WaitingForStakeToMature:
                 case CoinControlStatus.WaitingForUnspentConfirmations:
                 case CoinControlStatus.Starting:
