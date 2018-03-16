@@ -11,7 +11,7 @@ using Tumba.CanLindaControl.Model.Linda.Responses;
 
 namespace Tumba.CanLindaControl.Services
 {
-    public class CoinControlService : IDisposable, IRunnable
+    public class CoinControlService : IRunnable
     {
         public const string COMPATIBLE_WALLET_VERSIONS = "v1.0.1.3-g";
         public const int DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL = 10;

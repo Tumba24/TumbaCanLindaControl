@@ -35,20 +35,34 @@ coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {frequencyInMilliseco
 
             ConsoleMessageHandlingService messageService = new ConsoleMessageHandlingService();
 
+            IRunnable runnable = null;
+            bool runOk = false;
+            string errorMessage = null;
+            
             // TODO: Add a verb for handling master node earnings.
-            IRunnable runnable;
-            switch (verb)
+            try
             {
-                case Verb.CoinControl:
-                default:
+                switch (verb)
                 {
-                    runnable = new CoinControlService(messageService);
-                    break;
+                    case Verb.CoinControl:
+                    default:
+                    {
+                        runnable = new CoinControlService(messageService);
+                        break;
+                    }
+                }
+                
+                runOk = runnable.Run(args, out errorMessage);
+            }
+            finally
+            {
+                if (runnable != null)
+                {
+                    runnable.Dispose();
                 }
             }
 
-            string errorMessage;
-            if (!runnable.Run(args, out errorMessage))
+            if (!runOk)
             {
                 Console.WriteLine("Run failed!  See error: {0}", errorMessage);
                 Environment.Exit(-2);
