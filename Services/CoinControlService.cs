@@ -21,7 +21,7 @@ namespace Tumba.CanLindaControl.Services
         private string m_accountToCoinControl;
         private string m_walletPassphrase;
         private Timer m_timer;
-        private object m_runProcessLock = new object();
+        private object m_processNextLock = new object();
 
         public int FrequencyInMilliSeconds { get; private set; }
         public ConsoleMessageHandlingService MessageService { get; private set; }
@@ -251,7 +251,7 @@ namespace Tumba.CanLindaControl.Services
 
             if (!CheckStakingInfo(ref statusReport))
             {
-                return statusReport;
+                return null;
             }
 
             if (unspentInNeedOfCoinControl.Count == 1)
@@ -302,7 +302,7 @@ namespace Tumba.CanLindaControl.Services
 
         public void Dispose()
         {
-            lock(m_runProcessLock)
+            lock(m_processNextLock)
             {
                 if (m_timer != null)
                 {
@@ -379,15 +379,35 @@ namespace Tumba.CanLindaControl.Services
                     return false;
                 }
 
-                Start();
+                m_timer = new Timer();
+                m_timer.AutoReset = false;
+                m_timer.Interval = FrequencyInMilliSeconds;
+                m_timer.Elapsed += TimerElapsed;
 
+                if (!CheckWalletCompaitibility())
+                {
+                    return false;
+                }
+
+                // Attempt 2 unlocks to work around a wallet bug where the first unlock for staking only seems to unlock the whole wallet.
+                if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true || 
+                    !TryUnlockWallet(FrequencyInMilliSeconds * 3, true)))
+                {
+                    return false;
+                }
+
+                MessageService.Info(string.Format("Coin control set to run every {0} milliseconds.", FrequencyInMilliSeconds));
+
+                ProcessNext();
+
+                m_timer.Start();
                 wait.WaitOne();
             }
 
             return true;
         }
 
-        private void RunProcess()
+        private void ProcessNext()
         {
             MessageService.Break();
             MessageService.Info(string.Format("Account: {0}.", m_accountToCoinControl));
@@ -423,26 +443,23 @@ namespace Tumba.CanLindaControl.Services
             }
         }
 
-        private void Start()
+        private void TimerElapsed(object sender, EventArgs args)
         {
-            if (!CheckWalletCompaitibility())
+            lock(m_processNextLock)
             {
-                MessageService.Fail();
-                return;
+                try
+                {
+                    ProcessNext();
+                    if (m_timer != null)
+                    {
+                        m_timer.Start();
+                    }
+                }
+                catch (Exception exception)
+                {
+                    MessageService.Fail(string.Format("Coin control failed!  See exception: {0}", exception));
+                }
             }
-
-            // Attempt 2 unlocks to work around a wallet bug where the first unlock for staking only seems to unlock the whole wallet.
-            if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true || 
-                !TryUnlockWallet(FrequencyInMilliSeconds * 3, true)))
-            {
-                MessageService.Fail();
-                return;
-            }
-
-            MessageService.Info(string.Format("Coin control set to run every {0} milliseconds.", FrequencyInMilliSeconds));
-
-            RunProcess();
-            m_timer.Start();
         }
 
         private bool TryParseArgs(string[] args, out string errorMessage)
@@ -465,28 +482,6 @@ namespace Tumba.CanLindaControl.Services
             {
                 FrequencyInMilliSeconds = tmpFrequency;
             }
-
-            m_timer = new Timer();
-            m_timer.AutoReset = false;
-            m_timer.Interval = FrequencyInMilliSeconds;
-            m_timer.Elapsed += (sender, eventArgs) =>
-            {
-                lock(m_runProcessLock)
-                {
-                    try
-                    {
-                        RunProcess();
-                        if (m_timer != null)
-                        {
-                            m_timer.Start();
-                        }
-                    }
-                    catch (Exception exception)
-                    {
-                        MessageService.Fail(string.Format("Coin control failed!  See exception: {0}", exception));
-                    }
-                }
-            };
 
             errorMessage = null;
             return true;
