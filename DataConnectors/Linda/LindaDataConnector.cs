@@ -19,6 +19,11 @@ namespace Tumba.CanLindaControl.DataConnectors.Linda
             m_rpcPassword = rpcPassword;
         }
 
+        public static string FormatPostError(BaseRequest request, string errorMessage)
+        {
+            return string.Format("{0} failed! {1}", request.Method, errorMessage);
+        }
+
         public bool TryPost<T>(BaseRequest requestObj, out T responseObj, out string errorMessage)
         {
             HttpWebRequest request = (HttpWebRequest)WebRequest.Create("http://localhost:33821");
@@ -61,7 +66,10 @@ namespace Tumba.CanLindaControl.DataConnectors.Linda
             catch (Exception exception)
             {
                 responseObj = default(T);
-                errorMessage = string.Format("JSON RPC call failed!  See exception: {0}", exception);
+                errorMessage = FormatPostError(
+                    requestObj, 
+                    string.Format("JSON RPC call failed!  See exception: {0}", exception));
+                    
                 return false;
             }
 
@@ -72,6 +80,7 @@ namespace Tumba.CanLindaControl.DataConnectors.Linda
                 errorMessage = errorToken.ToObject<string>();
                 if (!string.IsNullOrEmpty(errorMessage))
                 {
+                    errorMessage = FormatPostError(requestObj, errorMessage);
                     responseObj = default(T);
                     return false;
                 }
@@ -85,7 +94,10 @@ namespace Tumba.CanLindaControl.DataConnectors.Linda
             catch (Exception exception)
             {
                 responseObj = default(T);
-                errorMessage = string.Format("Response deserialization failed!  See exception: {0}", exception);
+                errorMessage = FormatPostError(
+                    requestObj,
+                    string.Format("Response deserialization failed!  See exception: {0}", exception));
+
                 return false;
             }
 

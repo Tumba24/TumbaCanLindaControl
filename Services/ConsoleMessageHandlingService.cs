@@ -47,10 +47,5 @@ namespace Tumba.CanLindaControl.Services
             Console.WriteLine();
             Console.WriteLine(DateTime.Now.ToString("F"));
         }
-
-        public void PostError(BaseRequest request, string errorMessage)
-        {
-            Error(string.Format("{0} failed! {1}", request.Method, errorMessage));
-        }
     }
 }

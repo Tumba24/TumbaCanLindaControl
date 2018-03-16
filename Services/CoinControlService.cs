@@ -4,6 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Timers;
 using Tumba.CanLindaControl.DataConnectors.Linda;
+using Tumba.CanLindaControl.Helpers;
+using Tumba.CanLindaControl.Model;
 using Tumba.CanLindaControl.Model.Linda.Requests;
 using Tumba.CanLindaControl.Model.Linda.Responses;
 
@@ -19,7 +21,7 @@ namespace Tumba.CanLindaControl.Services
         private string m_accountToCoinControl;
         private string m_walletPassphrase;
         private Timer m_timer;
-        private object m_coinControlLock = new object();
+        private object m_runProcessLock = new object();
 
         public int FrequencyInMilliSeconds { get; private set; }
         public ConsoleMessageHandlingService MessageService { get; private set; }
@@ -29,95 +31,41 @@ namespace Tumba.CanLindaControl.Services
             MessageService = messageService;
         }
 
-        private bool CheckIfCoinControlIsNeeded(List<UnspentResponse> unspentInNeedOfCoinControl)
+        private bool CheckStakingRewards(ref CoinControlStatusReport statusReport)
         {
-            List<TransactionResponse> imatureTransactions = GetImatureTransactions(1);
-            if (imatureTransactions == null)
+            string errorMessage;
+            List<TransactionResponse> stakingTransactions;
+            TransactionHelper helper = new TransactionHelper(m_dataConnector);
+            if (!helper.TryGetStakingTransactions(
+                m_accountToCoinControl,
+                30,
+                out stakingTransactions,
+                out errorMessage))
             {
-                return false;
-            }
-
-            if (imatureTransactions.Count > 0)
-            {
-                MessageService.Info(string.Format(
-                    "Coin control status: Waiting for stake to mature - {0} LINDA {1} confirmations {2}",
-                    imatureTransactions[0].Amount,
-                    imatureTransactions[0].Confirmations,
-                    imatureTransactions[0].TransactionId));
-
-                return false;
-            }
-
-            foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
-            {
-                if (unspent.Confirmations < DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL)
-                {
-                    MessageService.Info(string.Format(
-                        "Coin control status: Waiting for more confirmations - {0}/{1} {2} LINDA {3}",
-                        unspent.Confirmations,
-                        DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL,
-                        unspent.Amount,
-                        unspent.TransactionId));
-
-                    return false;
-                }
-            }
-
-            if (!CheckStakingInfo())
-            {
-                return false;
-            }
-
-            if (unspentInNeedOfCoinControl.Count < 1)
-            {
-                MessageService.Info("Coin control status: Not ready - No unspent transactions.");
-                return false;
-            }
-            else if (unspentInNeedOfCoinControl.Count == 1)
-            {
-                MessageService.Info("Coin control status: Not ready - Only one unspent transaction.");
-                return false;
-            }
-
-            MessageService.Info("Coin control status: starting...");
-            return true;
-        }
-
-        private bool CheckStakingRewards()
-        {
-            List<TransactionResponse> stakingTransactions = GetStakingTransactions(30);
-            if (stakingTransactions == null)
-            {
+                MessageService.Error(errorMessage);
                 return false;
             }
 
             if (stakingTransactions.Count < 1)
             {
-                MessageService.Info("Rewards: No rewards received.");
+                statusReport.RewardTotal = 0;
                 return true;
             }
 
-            decimal rewardTotals = 0;
+            decimal rewardTotal = 0;
             foreach (TransactionResponse trans in stakingTransactions)
             {
-                rewardTotals += trans.Amount;
+                rewardTotal += trans.Amount;
             }
 
-            DateTimeOffset nowDate = DateTimeOffset.Now.Date;
-            DateTimeOffset oldestTransactionDate = GetTransactionTime(stakingTransactions[stakingTransactions.Count - 1].Time).LocalDateTime.Date;
-
-            TimeSpan diff = nowDate - oldestTransactionDate;
-
-            MessageService.Info(string.Format(
-                "Rewards: {0} LINDA over {1} days = {2} LINDA per day.",
-                Math.Round(rewardTotals, 4),
-                Math.Ceiling(diff.TotalDays),
-                Math.Round(rewardTotals / (decimal)diff.TotalDays, 4)));
+            statusReport.RewardTotal = rewardTotal;
+            statusReport.OldestRewardDateTime = TransactionHelper.GetTransactionTime(
+                stakingTransactions[stakingTransactions.Count - 1].Time).LocalDateTime.Date;
 
             return true;
         }
 
-        private bool CheckStakingInfo()
+        private bool CheckStakingInfo(ref CoinControlStatusReport statusReport)
         {
             string errorMessage;
 
@@ -128,7 +76,7 @@ namespace Tumba.CanLindaControl.Services
                 out stakingInfoResponse,
                 out errorMessage))
             {
-                MessageService.PostError(stakingInfoRequest, errorMessage);
+                MessageService.Error(errorMessage);
                 return false;
             }
 
@@ -137,17 +85,16 @@ namespace Tumba.CanLindaControl.Services
                 MessageService.Warning(string.Format("Staking is disabled!"));
             }
 
-            MessageService.Info(string.Format("Staking: {0}.",
-                (stakingInfoResponse.Staking ? "Yes" : "No")));
+            statusReport.Staking = stakingInfoResponse.Staking;
+            
 
             if (stakingInfoResponse.Staking)
             {
-                TimeSpan timeSpan = TimeSpan.FromSeconds(stakingInfoResponse.ExpectedTimeInSeconds);
-                MessageService.Info(string.Format("Expected time to earn reward: {0} days {1} hours.", timeSpan.Days, timeSpan.Hours));
+                statusReport.ExpectedTimeToEarnReward = TimeSpan.FromSeconds(stakingInfoResponse.ExpectedTimeInSeconds);
             }
             else
             {
-                if (!CheckExpectedTimeToStartStaking())
+                if (!CheckExpectedTimeToStartStaking(ref statusReport))
                 {
                     return false;
                 }
@@ -161,7 +108,7 @@ namespace Tumba.CanLindaControl.Services
             return true;
         }
 
-        private bool CheckExpectedTimeToStartStaking()
+        private bool CheckExpectedTimeToStartStaking(ref CoinControlStatusReport statusReport)
         {
             string errorMessage;
             ListUnspentRequest unspentRequest = new ListUnspentRequest();
@@ -171,7 +118,7 @@ namespace Tumba.CanLindaControl.Services
                 out unspentResponses, 
                 out errorMessage))
             {
-                MessageService.PostError(unspentRequest, errorMessage);
+                MessageService.Error(errorMessage);
                 return false;
             }
 
@@ -190,7 +137,7 @@ namespace Tumba.CanLindaControl.Services
                     GetTransactionResponse transResponse;
                     if (!m_dataConnector.TryPost(transRequest, out transResponse, out errorMessage))
                     {
-                        MessageService.PostError(transRequest, errorMessage);
+                        MessageService.Error(errorMessage);
                         return false;
                     }
 
@@ -200,17 +147,9 @@ namespace Tumba.CanLindaControl.Services
                     }
                 }
             }
-            
-            DateTimeOffset transactionTime = GetTransactionTime(time);
-            TimeSpan stakingDiff = transactionTime.UtcDateTime.AddHours(24) - DateTime.UtcNow;
-            if (stakingDiff.TotalSeconds > 0)
-            {
-                MessageService.Info(string.Format("Expected time to start staking: {0} hours {1} minutes.", stakingDiff.Hours, stakingDiff.Minutes));
-            }
-            else
-            {
-                MessageService.Warning("You should have already started staking!  Please troubleshoot your wallet.");
-            }
+
+            DateTimeOffset transactionTime = TransactionHelper.GetTransactionTime(time);
+            statusReport.ExpectedTimeToStartStaking = transactionTime.UtcDateTime.AddHours(24) - DateTime.UtcNow;
 
             return true;
         }
@@ -249,32 +188,90 @@ namespace Tumba.CanLindaControl.Services
             return true;
         }
 
-        private void DoCoinControl()
+        private CoinControlStatusReport CreateStatusReport(List<UnspentResponse> unspentInNeedOfCoinControl)
         {
-            MessageService.Break();
-            MessageService.Info(string.Format("Account: {0}.", m_accountToCoinControl));
+            CoinControlStatusReport statusReport = new CoinControlStatusReport();
 
-            if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true))
+            if (!CheckStakingRewards(ref statusReport))
             {
-                return;
+                return null;
             }
 
-            if (!CheckStakingRewards())
+            string errorMessage;
+            List<TransactionResponse> imatureTransactions;
+            TransactionHelper helper = new TransactionHelper(m_dataConnector);
+            if (!helper.TryGetImatureTransactions(
+                m_accountToCoinControl,
+                1,
+                out imatureTransactions,
+                out errorMessage))
             {
-                return;
+                MessageService.Error(errorMessage);
+                return null;
             }
 
-            List<UnspentResponse> unspentInNeedOfCoinControl = GetUnSpentInNeedOfCoinControl();
-            if (unspentInNeedOfCoinControl == null)
+            if (imatureTransactions.Count > 0)
             {
-                return;
+                statusReport.SetStatus(
+                    CoinControlStatus.WaitingForStakeToMature,
+                    string.Format(
+                        "Waiting for stake to mature - {0} LINDA {1} confirmations {2}",
+                        imatureTransactions[0].Amount,
+                        imatureTransactions[0].Confirmations,
+                        imatureTransactions[0].TransactionId));
+
+                return statusReport;
             }
 
-            if (!CheckIfCoinControlIsNeeded(unspentInNeedOfCoinControl))
+            foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
             {
-                return;
+                if (unspent.Confirmations < DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL)
+                {
+                    statusReport.SetStatus(
+                        CoinControlStatus.WaitingForUnspentConfirmations,
+                        string.Format(
+                            "Waiting for more confirmations - {0}/{1} {2} LINDA {3}",
+                            unspent.Confirmations,
+                            DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL,
+                            unspent.Amount,
+                            unspent.TransactionId));
+
+                    return statusReport;
+                }
             }
 
+            if (unspentInNeedOfCoinControl.Count > 1)
+            {
+                statusReport.SetStatus(
+                    CoinControlStatus.Starting,
+                    "Starting...");
+                
+                return statusReport;
+            }
+
+            if (!CheckStakingInfo(ref statusReport))
+            {
+                return statusReport;
+            }
+
+            if (unspentInNeedOfCoinControl.Count == 1)
+            {
+                statusReport.SetStatus(
+                    CoinControlStatus.NotReadyOneUnspent,
+                    "Not ready - Only one unspent transaction");
+                
+                return statusReport;
+            }
+
+            statusReport.SetStatus(
+                CoinControlStatus.NotReadyNoUnspent,
+                "Not ready - No unspent transactions.");
+            
+            return statusReport;
+        }
+
+        private void DoCoinControl(List<UnspentResponse> unspentInNeedOfCoinControl)
+        {
             decimal amount = GetAmount(unspentInNeedOfCoinControl);
             decimal fee = GetFee();
             if (fee < 0)
@@ -300,12 +297,12 @@ namespace Tumba.CanLindaControl.Services
 
             TryUnlockWallet(FrequencyInMilliSeconds * 3, true);
 
-            MessageService.Info("Coin control status: complete!");
+            MessageService.Info("Coin control complete!");
         }
 
         public void Dispose()
         {
-            lock(m_coinControlLock)
+            lock(m_runProcessLock)
             {
                 if (m_timer != null)
                 {
@@ -336,18 +333,13 @@ namespace Tumba.CanLindaControl.Services
             InfoResponse info;
             if (!m_dataConnector.TryPost<InfoResponse>(requestForInfo, out info, out errorMessage))
             {
-                MessageService.PostError(requestForInfo, errorMessage);
+                MessageService.Error(errorMessage);
                 return -1;
             }
             
             MessageService.Info(string.Format("Fee: {0} LINDA.", info.Fee));
 
             return info.Fee;
-        }
-
-        private List<TransactionResponse> GetImatureTransactions(int numberOfDays)
-        {
-            return GetTransactions("immature", numberOfDays);
         }
 
         private void PromptForWalletPassphrase()
@@ -373,97 +365,6 @@ namespace Tumba.CanLindaControl.Services
             }
         }
 
-        private List<TransactionResponse> GetStakingTransactions(int numberOfDays)
-        {
-            return GetTransactions("generate", numberOfDays);
-        }
-
-        private List<TransactionResponse> GetTransactions(string category, int numberOfDays)
-        {
-            DateTimeOffset localNowDate = DateTimeOffset.Now.Date;
-            DateTimeOffset localXDaysAgo = localNowDate.AddDays(numberOfDays * -1);
-
-            List<TransactionResponse> transactionsInCategory = new List<TransactionResponse>();
-
-            int count = 10;
-            int from = 0;
-
-            DateTimeOffset lastTransactionTime = DateTimeOffset.UtcNow;
-            while (lastTransactionTime.LocalDateTime.Date >= localXDaysAgo)
-            {
-                string errorMessage;
-                ListTransactionsRequest listRequest = new ListTransactionsRequest()
-                {
-                    Account = m_accountToCoinControl,
-                    Count = count,
-                    From = from
-                };
-
-                List<TransactionResponse> transactions;
-                if (!m_dataConnector.TryPost<List<TransactionResponse>>(listRequest, out transactions, out errorMessage))
-                {
-                    MessageService.PostError(listRequest, errorMessage);
-                    return null;
-                }
-
-                transactions.Reverse();
-
-                foreach (TransactionResponse trans in transactions)
-                {
-                    lastTransactionTime = GetTransactionTime(trans.Time);
-                    if (lastTransactionTime.LocalDateTime.Date >= localXDaysAgo && 
-                        trans.Category.Equals(category, StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        transactionsInCategory.Add(trans);
-                    }
-                }
-
-                if (transactions.Count < count)
-                {
-                    break;
-                }
-
-                from += count;
-            }
-
-            return transactionsInCategory;
-        }
-
-        public DateTimeOffset GetTransactionTime(long time)
-        {
-            DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            DateTime transactionTime = epoch.AddSeconds(time);
-
-            return new DateTimeOffset(transactionTime);
-        }
-
-        private List<UnspentResponse> GetUnSpentInNeedOfCoinControl()
-        {
-            string errorMessage;
-            ListUnspentRequest unspentRequest = new ListUnspentRequest();
-            List<UnspentResponse> unspentResponses;
-            if (!m_dataConnector.TryPost<List<UnspentResponse>>(
-                unspentRequest, 
-                out unspentResponses, 
-                out errorMessage))
-            {
-                MessageService.PostError(unspentRequest, errorMessage);
-                return null;
-            }
-
-            List<UnspentResponse> unspentForAccount = new List<UnspentResponse>();
-            foreach (UnspentResponse unspent in unspentResponses)
-            {
-                if (unspent.Account != null && 
-                    unspent.Account.Equals(m_accountToCoinControl, StringComparison.InvariantCultureIgnoreCase))
-                {
-                    unspentForAccount.Add(unspent);
-                }
-            }
-
-            return unspentForAccount;
-        }
-
         public bool Run(string[] args, out string errorMessage)
         {
             using (System.Threading.ManualResetEvent wait = new System.Threading.ManualResetEvent(false))
@@ -486,6 +387,42 @@ namespace Tumba.CanLindaControl.Services
             return true;
         }
 
+        private void RunProcess()
+        {
+            MessageService.Break();
+            MessageService.Info(string.Format("Account: {0}.", m_accountToCoinControl));
+
+            if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true))
+            {
+                return;
+            }
+
+            string errorMessage;
+            List<UnspentResponse> unspentInNeedOfCoinControl;
+            TransactionHelper helper = new TransactionHelper(m_dataConnector);
+            if (!helper.TryGetUnspentInNeedOfCoinControl(
+                m_accountToCoinControl,
+                out unspentInNeedOfCoinControl,
+                out errorMessage))
+            {
+                MessageService.Error(errorMessage);
+                return;
+            }
+
+            CoinControlStatusReport statusReport = CreateStatusReport(unspentInNeedOfCoinControl);
+            if (statusReport == null)
+            {
+                return;
+            }
+
+            statusReport.Report(MessageService);
+
+            if (statusReport.Status == CoinControlStatus.Starting)
+            {
+                DoCoinControl(unspentInNeedOfCoinControl);
+            }
+        }
+
         private void Start()
         {
             if (!CheckWalletCompaitibility())
@@ -504,7 +441,7 @@ namespace Tumba.CanLindaControl.Services
 
             MessageService.Info(string.Format("Coin control set to run every {0} milliseconds.", FrequencyInMilliSeconds));
 
-            DoCoinControl();
+            RunProcess();
             m_timer.Start();
         }
 
@@ -534,11 +471,11 @@ namespace Tumba.CanLindaControl.Services
             m_timer.Interval = FrequencyInMilliSeconds;
             m_timer.Elapsed += (sender, eventArgs) =>
             {
-                lock(m_coinControlLock)
+                lock(m_runProcessLock)
                 {
                     try
                     {
-                        DoCoinControl();
+                        RunProcess();
                         if (m_timer != null)
                         {
                             m_timer.Start();
@@ -568,7 +505,7 @@ namespace Tumba.CanLindaControl.Services
             string transactionId;
             if (!m_dataConnector.TryPost<string>(sendRequest, out transactionId, out errorMessage))
             {
-                MessageService.PostError(sendRequest, errorMessage);
+                MessageService.Error(errorMessage);
                 return false;
             }
 
@@ -586,7 +523,7 @@ namespace Tumba.CanLindaControl.Services
             if (!m_dataConnector.TryPost<string>(unlockRequest, out lockError, out errorMessage))
             {
                 MessageService.Error("Failed to unlock wallet!  Is the passphrase correct?");
-                MessageService.PostError(unlockRequest, errorMessage);
+                MessageService.Error(errorMessage);
                 return false;
             }
 
