@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Reflection;
 using Tumba.CanLindaControl.Model;
 using Tumba.CanLindaControl.Services;
 
@@ -17,6 +18,9 @@ coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {frequencyInMilliseco
 
         public static void Main(string[] args)
         {
+            Console.WriteLine(Assembly.GetExecutingAssembly().FullName);
+            Console.WriteLine();
+
             if (args.Length < 1 || 
                 args[0].Equals("h", StringComparison.InvariantCultureIgnoreCase) ||
                 args[0].Equals("help", StringComparison.InvariantCultureIgnoreCase) ||
