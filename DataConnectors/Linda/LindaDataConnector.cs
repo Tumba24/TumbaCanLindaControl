@@ -73,21 +73,21 @@ namespace Tumba.CanLindaControl.DataConnectors.Linda
                 return false;
             }
 
-            JObject rawResponse = JObject.Parse(responseObjStr);
-            JToken errorToken = rawResponse.GetValue("error");
-            if (errorToken != null)
-            {
-                errorMessage = errorToken.ToObject<string>();
-                if (!string.IsNullOrEmpty(errorMessage))
-                {
-                    errorMessage = FormatPostError(requestObj, errorMessage);
-                    responseObj = default(T);
-                    return false;
-                }
-            }
-
             try
             {
+                JObject rawResponse = JObject.Parse(responseObjStr);
+                JToken errorToken = rawResponse.GetValue("error");
+                if (errorToken != null)
+                {
+                    errorMessage = errorToken.ToObject<string>();
+                    if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        errorMessage = FormatPostError(requestObj, errorMessage);
+                        responseObj = default(T);
+                        return false;
+                    }
+                }
+                
                 JToken resultToken = rawResponse.GetValue("result");
                 responseObj = resultToken.ToObject<T>();
             }
