@@ -170,6 +170,7 @@ namespace Tumba.CanLindaControl.Services
 
             MessageService.Info("Linda wallet info retrieved!");
             MessageService.Info("Checking for wallet compatibility...");
+            MessageService.Info(string.Format("Compatible versions: {0}", COMPATIBLE_WALLET_VERSIONS));
 
             if (!COMPATIBLE_WALLET_VERSIONS.Contains(info.Version.ToLower()))
             {
@@ -184,7 +185,7 @@ namespace Tumba.CanLindaControl.Services
                 return false;
             }
 
-            MessageService.Info("Wallet compatibility check complete!");
+            MessageService.Info(string.Format("Connected wallet version: {0} is compatible!", info.Version));
             return true;
         }
 
