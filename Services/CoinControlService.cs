@@ -342,6 +342,42 @@ namespace Tumba.CanLindaControl.Services
             return info.Fee;
         }
 
+        private void ProcessNext()
+        {
+            MessageService.Break();
+            MessageService.Info(string.Format("Account: {0}.", m_accountToCoinControl));
+
+            if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true))
+            {
+                return;
+            }
+
+            string errorMessage;
+            List<UnspentResponse> unspentInNeedOfCoinControl;
+            TransactionHelper helper = new TransactionHelper(m_dataConnector);
+            if (!helper.TryGetUnspentInNeedOfCoinControl(
+                m_accountToCoinControl,
+                out unspentInNeedOfCoinControl,
+                out errorMessage))
+            {
+                MessageService.Error(errorMessage);
+                return;
+            }
+
+            CoinControlStatusReport statusReport = CreateStatusReport(unspentInNeedOfCoinControl);
+            if (statusReport == null)
+            {
+                return;
+            }
+
+            statusReport.Report(MessageService);
+
+            if (statusReport.Status == CoinControlStatus.Starting)
+            {
+                DoCoinControl(unspentInNeedOfCoinControl);
+            }
+        }
+
         private void PromptForWalletPassphrase()
         {
             Console.WriteLine("Please enter your wallet's passphrase:");
@@ -405,42 +441,6 @@ namespace Tumba.CanLindaControl.Services
             }
 
             return true;
-        }
-
-        private void ProcessNext()
-        {
-            MessageService.Break();
-            MessageService.Info(string.Format("Account: {0}.", m_accountToCoinControl));
-
-            if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true))
-            {
-                return;
-            }
-
-            string errorMessage;
-            List<UnspentResponse> unspentInNeedOfCoinControl;
-            TransactionHelper helper = new TransactionHelper(m_dataConnector);
-            if (!helper.TryGetUnspentInNeedOfCoinControl(
-                m_accountToCoinControl,
-                out unspentInNeedOfCoinControl,
-                out errorMessage))
-            {
-                MessageService.Error(errorMessage);
-                return;
-            }
-
-            CoinControlStatusReport statusReport = CreateStatusReport(unspentInNeedOfCoinControl);
-            if (statusReport == null)
-            {
-                return;
-            }
-
-            statusReport.Report(MessageService);
-
-            if (statusReport.Status == CoinControlStatus.Starting)
-            {
-                DoCoinControl(unspentInNeedOfCoinControl);
-            }
         }
 
         private void TimerElapsed(object sender, EventArgs args)
