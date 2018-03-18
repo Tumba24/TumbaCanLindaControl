@@ -68,7 +68,11 @@ coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {frequencyInMilliseco
 
             if (!runOk)
             {
-                Console.WriteLine("Run failed!  See error: {0}", errorMessage);
+                if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    Console.WriteLine("Run failed!  See error: {0}", errorMessage);
+                }
+                
                 Environment.Exit(-2);
             }
         }
