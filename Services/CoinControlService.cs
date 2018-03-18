@@ -154,41 +154,6 @@ namespace Tumba.CanLindaControl.Services
             return true;
         }
 
-        private bool CheckWalletCompaitibility()
-        {
-            InfoResponse info;
-            InfoRequest requestForInfo = new InfoRequest();
-            string errorMessage;
-
-            MessageService.Info("Connecting and reading Linda wallet info...");
-
-            if (!m_dataConnector.TryPost<InfoResponse>(requestForInfo, out info, out errorMessage))
-            {
-                MessageService.Fail(errorMessage);
-                return false;
-            }
-
-            MessageService.Info("Linda wallet info retrieved!");
-            MessageService.Info("Checking for wallet compatibility...");
-            MessageService.Info(string.Format("Compatible versions: {0}", COMPATIBLE_WALLET_VERSIONS));
-
-            if (!COMPATIBLE_WALLET_VERSIONS.Contains(info.Version.ToLower()))
-            {
-                MessageService.Fail(string.Format(
-                    "Linda wallet version: '{0}' is not compatible!",
-                    info.Version));
-
-                MessageService.Fail(string.Format(
-                    "See compatible versions: {0}",
-                    COMPATIBLE_WALLET_VERSIONS));
-                
-                return false;
-            }
-
-            MessageService.Info(string.Format("Connected wallet version: {0} is compatible!", info.Version));
-            return true;
-        }
-
         private CoinControlStatusReport CreateStatusReport(List<UnspentResponse> unspentInNeedOfCoinControl)
         {
             CoinControlStatusReport statusReport = new CoinControlStatusReport();
@@ -421,7 +386,7 @@ namespace Tumba.CanLindaControl.Services
                 m_timer.Interval = FrequencyInMilliSeconds;
                 m_timer.Elapsed += TimerElapsed;
 
-                if (!CheckWalletCompaitibility())
+                if (!TryCheckWalletCompaitibility(out errorMessage))
                 {
                     return false;
                 }
@@ -461,6 +426,35 @@ namespace Tumba.CanLindaControl.Services
                     MessageService.Fail(string.Format("Coin control failed!  See exception: {0}", exception));
                 }
             }
+        }
+
+        private bool TryCheckWalletCompaitibility(out string errorMessage)
+        {
+            InfoResponse info;
+            InfoRequest requestForInfo = new InfoRequest();
+
+            MessageService.Info("Connecting and reading Linda wallet info...");
+
+            if (!m_dataConnector.TryPost<InfoResponse>(requestForInfo, out info, out errorMessage))
+            {
+                return false;
+            }
+
+            MessageService.Info("Linda wallet info retrieved!");
+            MessageService.Info("Checking for wallet compatibility...");
+            MessageService.Info(string.Format("Compatible versions: {0}", COMPATIBLE_WALLET_VERSIONS));
+
+            if (!COMPATIBLE_WALLET_VERSIONS.Contains(info.Version.ToLower()))
+            {
+                errorMessage = string.Format(
+                    "Linda wallet version: '{0}' is not compatible!",
+                    info.Version);
+                
+                return false;
+            }
+
+            MessageService.Info(string.Format("Connected wallet version: {0} is compatible!", info.Version));
+            return true;
         }
 
         private bool TryParseArgs(string[] args, out string errorMessage)
