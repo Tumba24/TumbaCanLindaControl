@@ -238,6 +238,12 @@ namespace Tumba.CanLindaControl.Services
 
         private void DoCoinControl(List<UnspentResponse> unspentInNeedOfCoinControl)
         {
+            string toAddress;
+            if (!TryGetToAddress(unspentInNeedOfCoinControl, out toAddress))
+            {
+                return;
+            }
+
             decimal amount = GetAmount(unspentInNeedOfCoinControl);
             decimal fee = GetFee();
             if (fee < 0)
@@ -255,7 +261,7 @@ namespace Tumba.CanLindaControl.Services
 
             if (!TrySendFrom(
                 m_accountToCoinControl,
-                unspentInNeedOfCoinControl[0].Address,
+                toAddress,
                 amountAfterFee))
             {
                 return;
@@ -454,6 +460,45 @@ namespace Tumba.CanLindaControl.Services
             }
 
             MessageService.Info(string.Format("Connected wallet version: {0} is compatible!", info.Version));
+            return true;
+        }
+
+        private bool TryGetToAddress(List<UnspentResponse> unspentInNeedOfCoinControl, out string toAddress)
+        {
+            toAddress = null;
+            foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
+            {
+                if (string.IsNullOrEmpty(unspent.Address))
+                {
+                    MessageService.Fail(string.Format(
+                        "Unspent transaction {0} has a null or empty address!", 
+                        unspent.TransactionId));
+                    
+                    return false;
+                }
+
+                if (toAddress == null)
+                {
+                    toAddress = unspent.Address;
+                }
+                else if (!toAddress.Equals(unspent.Address))
+                {
+                    MessageService.Fail(string.Format(
+                        "Unspent transaction {0} contains address {1} which doesn't match address {2}!", 
+                        unspent.TransactionId,
+                        unspent.Address,
+                        toAddress));
+
+                    return false;
+                }
+            }
+
+            if (string.IsNullOrEmpty(toAddress))
+            {
+                MessageService.Fail("To address not found!");
+                return false;
+            }
+
             return true;
         }
 
