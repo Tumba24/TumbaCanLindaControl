@@ -238,9 +238,10 @@ namespace Tumba.CanLindaControl.Services
 
         private void DoCoinControl(List<UnspentResponse> unspentInNeedOfCoinControl)
         {
-            string toAddress;
-            if (!TryGetToAddress(unspentInNeedOfCoinControl, out toAddress))
+            string toAddress, errorMessage;
+            if (!TryGetToAddress(unspentInNeedOfCoinControl, out toAddress, out errorMessage))
             {
+                MessageService.Fail(errorMessage);
                 return;
             }
 
@@ -254,22 +255,30 @@ namespace Tumba.CanLindaControl.Services
             decimal amountAfterFee = amount - fee;
             MessageService.Info(string.Format("Amount After Fee: {0} LINDA.", amountAfterFee));
 
-            if (!TryUnlockWallet(5, false))
+            if (!TryUnlockWallet(5, false, out errorMessage))
             {
+                MessageService.Error(errorMessage);
                 return;
             }
 
             if (!TrySendFrom(
                 m_accountToCoinControl,
                 toAddress,
-                amountAfterFee))
+                amountAfterFee,
+                out errorMessage))
             {
+                MessageService.Error(errorMessage);
                 return;
             }
 
-            TryUnlockWallet(FrequencyInMilliSeconds * 3, true);
-
             MessageService.Info("Coin control complete!");
+
+            if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true, out errorMessage))
+            {
+                MessageService.Error(string.Format(
+                    "Failed to unlock wallet for staking only!  Wallet may remain entirely unlocked for up to 5 more seconds.  See error: {0}",
+                    errorMessage));
+            }
         }
 
         public void Dispose()
@@ -319,12 +328,13 @@ namespace Tumba.CanLindaControl.Services
             MessageService.Break();
             MessageService.Info(string.Format("Account: {0}.", m_accountToCoinControl));
 
-            if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true))
+            string errorMessage;
+            if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true, out errorMessage))
             {
+                MessageService.Error(errorMessage);
                 return;
             }
 
-            string errorMessage;
             List<UnspentResponse> unspentInNeedOfCoinControl;
             TransactionHelper helper = new TransactionHelper(m_dataConnector);
             if (!helper.TryGetUnspentInNeedOfCoinControl(
@@ -398,8 +408,8 @@ namespace Tumba.CanLindaControl.Services
                 }
 
                 // Attempt 2 unlocks to work around a wallet bug where the first unlock for staking only seems to unlock the whole wallet.
-                if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true || 
-                    !TryUnlockWallet(FrequencyInMilliSeconds * 3, true)))
+                if (!TryUnlockWallet(FrequencyInMilliSeconds * 3, true, out errorMessage) || 
+                    !TryUnlockWallet(FrequencyInMilliSeconds * 3, true, out errorMessage))
                 {
                     return false;
                 }
@@ -463,16 +473,19 @@ namespace Tumba.CanLindaControl.Services
             return true;
         }
 
-        private bool TryGetToAddress(List<UnspentResponse> unspentInNeedOfCoinControl, out string toAddress)
+        private bool TryGetToAddress(
+            List<UnspentResponse> unspentInNeedOfCoinControl, 
+            out string toAddress, 
+            out string errorMessage)
         {
             toAddress = null;
             foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
             {
                 if (string.IsNullOrEmpty(unspent.Address))
                 {
-                    MessageService.Fail(string.Format(
+                    errorMessage = string.Format(
                         "Unspent transaction {0} has a null or empty address!", 
-                        unspent.TransactionId));
+                        unspent.TransactionId);
                     
                     return false;
                 }
@@ -483,11 +496,11 @@ namespace Tumba.CanLindaControl.Services
                 }
                 else if (!toAddress.Equals(unspent.Address))
                 {
-                    MessageService.Fail(string.Format(
+                    errorMessage = string.Format(
                         "Unspent transaction {0} contains address {1} which doesn't match address {2}!", 
                         unspent.TransactionId,
                         unspent.Address,
-                        toAddress));
+                        toAddress);
 
                     return false;
                 }
@@ -495,10 +508,11 @@ namespace Tumba.CanLindaControl.Services
 
             if (string.IsNullOrEmpty(toAddress))
             {
-                MessageService.Fail("To address not found!");
+                errorMessage = "To address not found!";
                 return false;
             }
 
+            errorMessage = null;
             return true;
         }
 
@@ -527,7 +541,7 @@ namespace Tumba.CanLindaControl.Services
             return true;
         }
 
-        private bool TrySendFrom(string fromAccount, string toAddress, decimal amountAfterFee)
+        private bool TrySendFrom(string fromAccount, string toAddress, decimal amountAfterFee, out string errorMessage)
         {
             SendFromRequest sendRequest = new SendFromRequest()
             {
@@ -536,11 +550,9 @@ namespace Tumba.CanLindaControl.Services
                 AmountAfterFee = amountAfterFee
             };
 
-            string errorMessage;
             string transactionId;
             if (!m_dataConnector.TryPost<string>(sendRequest, out transactionId, out errorMessage))
             {
-                MessageService.Error(errorMessage);
                 return false;
             }
 
@@ -548,23 +560,25 @@ namespace Tumba.CanLindaControl.Services
             return true;
         }
 
-        private bool TryUnlockWallet(int timeout, bool forStakingOnly)
+        private bool TryUnlockWallet(int timeout, bool forStakingOnly, out string errorMessage)
         {
-            string lockError, errorMessage;
+            string lockError;
 
             WalletPassphraseRequest unlockRequest = new WalletPassphraseRequest(m_walletPassphrase);
             unlockRequest.StakingOnly = forStakingOnly;
             unlockRequest.TimeoutInSeconds = timeout;
             if (!m_dataConnector.TryPost<string>(unlockRequest, out lockError, out errorMessage))
             {
-                MessageService.Error("Failed to unlock wallet!  Is the passphrase correct?");
-                MessageService.Error(errorMessage);
+                errorMessage = string.Format(
+                    "Failed to unlock wallet!  Is the passphrase correct?  See error: {0}",
+                    errorMessage);
+                
                 return false;
             }
 
             if (!string.IsNullOrEmpty(lockError))
             {
-                MessageService.Error(string.Format("Unlock request returned error: {0}", lockError));
+                errorMessage = string.Format("Unlock request returned error: {0}", lockError);
                 return false;
             }
 
