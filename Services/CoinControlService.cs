@@ -13,7 +13,6 @@ namespace Tumba.CanLindaControl.Services
 {
     public class CoinControlService : IRunnable
     {
-        public const string COMPATIBLE_WALLET_VERSIONS = "v1.0.1.3-g";
         public const int DEFAULT_CONFIRMATION_COUNT_REQUIRED_FOR_COIN_CONTROL = 10;
         public const int DEFAULT_FREQUENCY = 60000; // 1 minute
 
@@ -450,31 +449,8 @@ namespace Tumba.CanLindaControl.Services
 
         private bool TryCheckWalletCompaitibility(out string errorMessage)
         {
-            InfoResponse info;
-            InfoRequest requestForInfo = new InfoRequest();
-
-            MessageService.Info("Connecting and reading Linda wallet info...");
-
-            if (!m_dataConnector.TryPost<InfoResponse>(requestForInfo, out info, out errorMessage))
-            {
-                return false;
-            }
-
-            MessageService.Info("Linda wallet info retrieved!");
-            MessageService.Info("Checking for wallet compatibility...");
-            MessageService.Info(string.Format("Compatible versions: {0}", COMPATIBLE_WALLET_VERSIONS));
-
-            if (!COMPATIBLE_WALLET_VERSIONS.Contains(info.Version.ToLower()))
-            {
-                errorMessage = string.Format(
-                    "Linda wallet version: '{0}' is not compatible!",
-                    info.Version);
-                
-                return false;
-            }
-
-            MessageService.Info(string.Format("Connected wallet version: {0} is compatible!", info.Version));
-            return true;
+            WalletHelper helper = new WalletHelper(m_dataConnector);
+            return helper.TryCheckWalletCompaitibility(MessageService, out errorMessage);
         }
 
         private bool TryParseArgs(string[] args, out string errorMessage)
