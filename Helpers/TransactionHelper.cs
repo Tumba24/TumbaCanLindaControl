@@ -23,6 +23,49 @@ namespace Tumba.CanLindaControl.Helpers
             return new DateTimeOffset(transactionTime);
         }
 
+        public static bool TryGetToAddress(
+            List<UnspentResponse> unspentInNeedOfCoinControl, 
+            out string toAddress, 
+            out string errorMessage)
+        {
+            toAddress = null;
+            foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
+            {
+                if (string.IsNullOrEmpty(unspent.Address))
+                {
+                    errorMessage = string.Format(
+                        "Unspent transaction {0} has a null or empty address!", 
+                        unspent.TransactionId);
+                    
+                    return false;
+                }
+
+                if (toAddress == null)
+                {
+                    toAddress = unspent.Address;
+                }
+                else if (!toAddress.Equals(unspent.Address))
+                {
+                    errorMessage = string.Format(
+                        "Unspent transaction {0} contains address {1} which doesn't match address {2}!", 
+                        unspent.TransactionId,
+                        unspent.Address,
+                        toAddress);
+
+                    return false;
+                }
+            }
+
+            if (string.IsNullOrEmpty(toAddress))
+            {
+                errorMessage = "To address not found!";
+                return false;
+            }
+
+            errorMessage = null;
+            return true;
+        }
+
         public bool TryGetImatureTransactions(
             string account, 
             int numberOfDays, 
@@ -133,6 +176,23 @@ namespace Tumba.CanLindaControl.Helpers
             }
 
             return true;
+        }
+
+        public bool TrySendFrom(
+            string fromAccount, 
+            string toAddress, 
+            decimal amountAfterFee, 
+            out string transactionId,
+            out string errorMessage)
+        {
+            SendFromRequest sendRequest = new SendFromRequest()
+            {
+                FromAccount = fromAccount,
+                ToAddress = toAddress,
+                AmountAfterFee = amountAfterFee
+            };
+
+            return m_dataConnector.TryPost<string>(sendRequest, out transactionId, out errorMessage);
         }
     }
 }
