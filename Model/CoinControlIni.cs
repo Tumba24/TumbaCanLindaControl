@@ -82,7 +82,7 @@ namespace Tumba.CanLindaControl.Model
                 AddValueError(errors, CoinControlIniKeys.RunFrequencyInMilliSeconds, typeof(int));
             }
 
-            return errors.Count > 0;
+            return errors.Count < 1;
         }
     }
 }

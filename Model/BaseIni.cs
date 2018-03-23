@@ -14,7 +14,7 @@ namespace Tumba.CanLindaControl.Model
 
         public virtual string CreateValueError(string key, Type type)
         {
-            return string.Format("Invalid '{0}'!  Please specify a valid {1}", key, type.Name);
+            return string.Format("Invalid {0}!  Please specify a valid {1}.", key, type.Name);
         }
 
         public virtual string GetValue(string key)
