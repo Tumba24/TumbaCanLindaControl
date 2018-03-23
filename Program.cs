@@ -14,7 +14,7 @@ Linda-qt.exe -server=1 -rpcuser=user -rpcpassword=password -rpcallowip=127.0.0.1
 -rpcuser and -rpcpassword should be changed.
 
 Tumba can Linda control command line verb examples:
-coincontrol {rpcuser} {rpcpassword} {accountToCoinControl} {frequencyInMilliseconds}";
+coincontrol {coinControlConfigFilePath}";
 
         public static void Main(string[] args)
         {
