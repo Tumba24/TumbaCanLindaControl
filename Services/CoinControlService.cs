@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Timers;
 using Tumba.CanLindaControl.DataConnectors.Linda;
 using Tumba.CanLindaControl.Helpers;
@@ -464,7 +465,7 @@ namespace Tumba.CanLindaControl.Services
             {
                 errorMessage = string.Format(
                     "Failed to read coin control config: {0}\r\n{1}",
-                    configPath,
+                    new FileInfo(configPath).FullName,
                     errorMessage);
                 
                 return false;
