@@ -407,9 +407,7 @@ namespace Tumba.CanLindaControl.Services
                     return false;
                 }
 
-                // Attempt 2 unlocks to work around a wallet bug where the first unlock for staking only seems to unlock the whole wallet.
-                if (!TryUnlockWalletForStakingOnly(out errorMessage) || 
-                    !TryUnlockWalletForStakingOnly(out errorMessage))
+                if (!TryUnlockWalletForStakingOnly(out errorMessage))
                 {
                     return false;
                 }
@@ -492,6 +490,17 @@ namespace Tumba.CanLindaControl.Services
         private bool TryUnlockWalletForStakingOnly(out string errorMessage)
         {
             WalletHelper helper = new WalletHelper(m_dataConnector);
+
+            // Attempt 2 unlocks to work around a wallet bug where the first unlock for staking only seems to unlock the whole wallet.
+            if (!helper.TryUnlockWallet(
+                m_walletPassphrase,
+                m_config.RunFrequencyInMilliSeconds * 3,
+                true, 
+                out errorMessage))
+            {
+                return false;
+            }
+
             return helper.TryUnlockWallet(
                 m_walletPassphrase,
                 m_config.RunFrequencyInMilliSeconds * 3,
