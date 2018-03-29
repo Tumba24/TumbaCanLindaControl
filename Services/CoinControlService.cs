@@ -17,6 +17,7 @@ namespace Tumba.CanLindaControl.Services
         private CoinControlIni m_config;
         private LindaDataConnector m_dataConnector;
         private Timer m_timer;
+        private WalletService m_lindaWalletService;
         private object m_processNextLock = new object();
         private string m_walletPassphrase;
 
@@ -290,6 +291,11 @@ namespace Tumba.CanLindaControl.Services
                     m_timer.Dispose();
                     m_timer = null;
                 }
+
+                if (m_lindaWalletService != null)
+                {
+                    m_lindaWalletService.Dispose();
+                }
             }
         }
 
@@ -381,6 +387,8 @@ namespace Tumba.CanLindaControl.Services
                     m_walletPassphrase += keyInfo.KeyChar;
                 }
             }
+
+            Console.WriteLine();
         }
 
         public bool Run(string[] args, out string errorMessage)
@@ -402,6 +410,13 @@ namespace Tumba.CanLindaControl.Services
                 m_timer.Interval = m_config.RunFrequencyInMilliSeconds;
                 m_timer.Elapsed += TimerElapsed;
 
+                PromptForWalletPassphrase();
+
+                if (m_config.StartLindaWalletExe.Value && !TryStartLindaWallet(out errorMessage))
+                {
+                    return false;
+                }
+
                 if (!TryCheckWalletCompaitibility(out errorMessage))
                 {
                     return false;
@@ -412,7 +427,9 @@ namespace Tumba.CanLindaControl.Services
                     return false;
                 }
 
-                MessageService.Info(string.Format("Coin control set to run every {0} milliseconds.", m_config.RunFrequencyInMilliSeconds));
+                MessageService.Info(string.Format(
+                    "Coin control set to run every {0} milliseconds.", 
+                    m_config.RunFrequencyInMilliSeconds));
 
                 ProcessNext();
 
@@ -475,9 +492,38 @@ namespace Tumba.CanLindaControl.Services
                 m_config.RpcUser,
                 m_config.RpcPassword);
 
-            PromptForWalletPassphrase();
-
             errorMessage = null;
+            return true;
+        }
+
+        private bool TryStartLindaWallet(out string errorMessage)
+        {
+            m_lindaWalletService = new WalletService(m_config);
+
+            InfoResponse info;
+            InfoRequest requestForInfo = new InfoRequest();
+            if (m_dataConnector.TryPost<InfoResponse>(requestForInfo, out info, out errorMessage))
+            {
+                MessageService.Warning("Looks like your Linda wallet is already running!");
+                MessageService.Warning("Stopping your Linda wallet...");
+
+                if (!m_lindaWalletService.TryStopLindaWallet(m_dataConnector, out errorMessage))
+                {
+                    return false;
+                }
+
+                MessageService.Warning("Wallet stopped.");
+            }
+
+            MessageService.Info("Starting your Linda wallet...");
+            
+            if (!m_lindaWalletService.TryStartLindaWallet(m_dataConnector, out errorMessage))
+            {
+                return false;
+            }
+
+            MessageService.Info("Linda wallet startup complete!");
+
             return true;
         }
 

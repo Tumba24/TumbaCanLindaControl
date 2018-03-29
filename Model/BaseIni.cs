@@ -27,9 +27,18 @@ namespace Tumba.CanLindaControl.Model
             return m_keyValues[key];
         }
 
-        public virtual string ParseStringValue(string key)
+        public virtual bool? ParseBoolValue(string key)
         {
-            return GetValue(key);
+            int intVal = ParseInt32Value(key);
+            switch (intVal)
+            {
+                case 0:
+                    return false;
+                case 1:
+                    return true;
+                default:
+                    return null;
+            }
         }
 
         public virtual int ParseInt32Value(string key)
@@ -49,6 +58,11 @@ namespace Tumba.CanLindaControl.Model
             return Int32.MinValue;
         }
 
+        public virtual string ParseStringValue(string key)
+        {
+            return GetValue(key);
+        }
+
         public virtual void SetValues(Dictionary<string, string> keyValues)
         {
             m_keyValues = keyValues;
@@ -58,6 +72,11 @@ namespace Tumba.CanLindaControl.Model
         {
             errors = new List<string>();
             return true;
+        }
+
+        public virtual bool ValidateBoolValue(bool? value)
+        {
+            return value.HasValue;
         }
 
         public virtual bool ValidateInt32Value(int value)

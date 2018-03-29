@@ -6,10 +6,13 @@ namespace Tumba.CanLindaControl.Model
     public class CoinControlIniKeys
     {
         public const string AccountToCoinControl = "AccountToCoinControl";
+        public const string LindaWalletAdditionalArgs = "LindaWalletAdditionalArgs";
+        public const string LindaWalletExeFilePath = "LindaWalletExeFilePath";
         public const string RequiredConfirmations = "RequiredConfirmations";
         public const string RpcPassword = "RpcPassword";
         public const string RpcUser = "RpcUser";
         public const string RunFrequencyInMilliSeconds = "RunFrequencyInMilliSeconds";
+        public const string StartLindaWalletExe = "StartLindaWalletExe";
     }
     public class CoinControlIni : BaseIni
     {
@@ -18,6 +21,22 @@ namespace Tumba.CanLindaControl.Model
             get
             {
                 return ParseStringValue(CoinControlIniKeys.AccountToCoinControl);
+            }
+        }
+
+        public string LindaWalletAdditionalArgs
+        {
+            get
+            {
+                return ParseStringValue(CoinControlIniKeys.LindaWalletAdditionalArgs);
+            }
+        }
+
+        public string LindaWalletExeFilePath
+        {
+            get
+            {
+                return ParseStringValue(CoinControlIniKeys.LindaWalletExeFilePath);
             }
         }
 
@@ -53,6 +72,14 @@ namespace Tumba.CanLindaControl.Model
             }
         }
 
+        public bool? StartLindaWalletExe
+        {
+            get
+            {
+                return ParseBoolValue(CoinControlIniKeys.StartLindaWalletExe);
+            }
+        }
+
         public override bool ValidateIni(out List<string> errors)
         {
             errors = new List<string>();
@@ -60,6 +87,16 @@ namespace Tumba.CanLindaControl.Model
             if (!ValidateStrValue(AccountToCoinControl))
             {
                 AddValueError(errors, CoinControlIniKeys.AccountToCoinControl, typeof(string));
+            }
+
+            if (!ValidateStrValue(LindaWalletAdditionalArgs))
+            {
+                AddValueError(errors, CoinControlIniKeys.LindaWalletAdditionalArgs, typeof(string));
+            }
+
+            if (!ValidateStrValue(LindaWalletExeFilePath))
+            {
+                AddValueError(errors, CoinControlIniKeys.LindaWalletExeFilePath, typeof(string));
             }
 
             if (!ValidateInt32Value(RequiredConfirmations))
@@ -80,6 +117,11 @@ namespace Tumba.CanLindaControl.Model
             if (!ValidateInt32Value(RunFrequencyInMilliSeconds))
             {
                 AddValueError(errors, CoinControlIniKeys.RunFrequencyInMilliSeconds, typeof(int));
+            }
+
+            if (!ValidateBoolValue(StartLindaWalletExe))
+            {
+                AddValueError(errors, CoinControlIniKeys.StartLindaWalletExe, typeof(bool));
             }
 
             return errors.Count < 1;
