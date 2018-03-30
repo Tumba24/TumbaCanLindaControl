@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Tumba.CanLindaControl.DataConnectors.Linda;
+using Tumba.CanLindaControl.Model.Linda;
 using Tumba.CanLindaControl.Model.Linda.Requests;
 using Tumba.CanLindaControl.Model.Linda.Responses;
 
@@ -23,57 +24,14 @@ namespace Tumba.CanLindaControl.Helpers
             return new DateTimeOffset(transactionTime);
         }
 
-        public static bool TryGetToAddress(
-            List<UnspentResponse> unspentInNeedOfCoinControl, 
-            out string toAddress, 
-            out string errorMessage)
-        {
-            toAddress = null;
-            foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
-            {
-                if (string.IsNullOrEmpty(unspent.Address))
-                {
-                    errorMessage = string.Format(
-                        "Unspent transaction {0} has a null or empty address!", 
-                        unspent.TransactionId);
-                    
-                    return false;
-                }
-
-                if (toAddress == null)
-                {
-                    toAddress = unspent.Address;
-                }
-                else if (!toAddress.Equals(unspent.Address))
-                {
-                    errorMessage = string.Format(
-                        "Unspent transaction {0} contains address {1} which doesn't match address {2}!", 
-                        unspent.TransactionId,
-                        unspent.Address,
-                        toAddress);
-
-                    return false;
-                }
-            }
-
-            if (string.IsNullOrEmpty(toAddress))
-            {
-                errorMessage = "To address not found!";
-                return false;
-            }
-
-            errorMessage = null;
-            return true;
-        }
-
         public bool TryGetImatureTransactions(
-            string account, 
+            string address, 
             int numberOfDays, 
             out List<TransactionResponse> transactions, 
             out string errorMessage)
         {
             return TryGetTransactions(
-                account,
+                address,
                 "immature", 
                 numberOfDays,
                 out transactions,
@@ -81,13 +39,13 @@ namespace Tumba.CanLindaControl.Helpers
         }
 
         public bool TryGetStakingTransactions(
-            string account, 
+            string address, 
             int numberOfDays, 
             out List<TransactionResponse> transactions, 
             out string errorMessage)
         {
             return TryGetTransactions(
-                account,
+                address,
                 "generate", 
                 numberOfDays,
                 out transactions,
@@ -95,7 +53,7 @@ namespace Tumba.CanLindaControl.Helpers
         }
 
         public bool TryGetTransactions(
-            string account, 
+            string address, 
             string category, 
             int numberOfDays,
             out List<TransactionResponse> transactionsInCategory, 
@@ -114,7 +72,7 @@ namespace Tumba.CanLindaControl.Helpers
             {
                 ListTransactionsRequest listRequest = new ListTransactionsRequest()
                 {
-                    Account = account,
+                    Account = "*",
                     Count = count,
                     From = from
                 };
@@ -130,7 +88,8 @@ namespace Tumba.CanLindaControl.Helpers
                 foreach (TransactionResponse trans in allTransactions)
                 {
                     lastTransactionTime = GetTransactionTime(trans.Time);
-                    if (lastTransactionTime.LocalDateTime.Date >= localXDaysAgo && 
+                    if (trans.Address.Equals(address, StringComparison.CurrentCultureIgnoreCase) &&
+                        lastTransactionTime.LocalDateTime.Date >= localXDaysAgo && 
                         trans.Category.Equals(category, StringComparison.InvariantCultureIgnoreCase))
                     {
                         transactionsInCategory.Add(trans);
@@ -150,7 +109,7 @@ namespace Tumba.CanLindaControl.Helpers
         }
 
         public bool TryGetUnspentInNeedOfCoinControl(
-            string account,
+            string address,
             out List<UnspentResponse> unspentTransactions,
             out string errorMessage)
         {
@@ -166,33 +125,77 @@ namespace Tumba.CanLindaControl.Helpers
                 return false;
             }
 
+            HashSet<string> unspentTransactionIds = new HashSet<string>();
             foreach (UnspentResponse unspent in unspentResponses)
             {
-                if (unspent.Account != null && 
-                    unspent.Account.Equals(account, StringComparison.InvariantCultureIgnoreCase))
+                if (unspent.Address.Equals(address, StringComparison.InvariantCultureIgnoreCase))
                 {
+                    if (!unspentTransactionIds.Contains(unspent.TransactionId))
+                    {
+                        unspentTransactionIds.Add(unspent.TransactionId);
+                    }
+
                     unspentTransactions.Add(unspent);
+                }
+            }
+
+            // Add change transactions.
+            foreach (string transactinId in unspentTransactionIds)
+            {
+                foreach (UnspentResponse change in unspentResponses)
+                {
+                    if (!change.Address.Equals(address, StringComparison.InvariantCultureIgnoreCase) &&
+                        change.TransactionId.Equals(transactinId, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        unspentTransactions.Add(change);
+                    }
                 }
             }
 
             return true;
         }
 
-        public bool TrySendFrom(
-            string fromAccount, 
-            string toAddress, 
-            decimal amountAfterFee, 
+        public bool TrySendRawTransaction(
+            CreateRawTransactionRequest createRequest,
             out string transactionId,
             out string errorMessage)
         {
-            SendFromRequest sendRequest = new SendFromRequest()
-            {
-                FromAccount = fromAccount,
-                ToAddress = toAddress,
-                AmountAfterFee = amountAfterFee
-            };
+            transactionId = null;
 
-            return m_dataConnector.TryPost<string>(sendRequest, out transactionId, out errorMessage);
+            string unsignedHex;
+            if (!m_dataConnector.TryPost<string>(createRequest, out unsignedHex, out errorMessage))
+            {
+                return false;
+            }
+
+            SignRawTransactionRequest signRequest = new SignRawTransactionRequest()
+            {
+                RawHex = unsignedHex
+            };
+            SignRawTransactionResponse signResponse;
+            if (!m_dataConnector.TryPost<SignRawTransactionResponse>(signRequest, out signResponse, out errorMessage))
+            {
+                return false;
+            }
+
+            if (!signResponse.Complete)
+            {
+                errorMessage = "Sign raw transaction response is incomplete!";
+                return false;
+            }
+
+            SendRawTransactionRequest sendRequest = new SendRawTransactionRequest()
+            {
+                RawHex = signResponse.RawHex
+            };
+            string tmpTransactionId;
+            if (!m_dataConnector.TryPost<string>(sendRequest, out tmpTransactionId, out errorMessage))
+            {
+                return false;
+            }
+
+            transactionId = tmpTransactionId;
+            return true;
         }
     }
 }

@@ -19,5 +19,8 @@ namespace Tumba.CanLindaControl.Model.Linda.Responses
 
         [JsonProperty("confirmations")]
         public long Confirmations { get; set; }
+
+        [JsonProperty("vout")]
+        public int OutputIndex { get; set; }
     }
 }

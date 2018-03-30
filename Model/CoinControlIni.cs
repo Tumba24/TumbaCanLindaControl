@@ -5,7 +5,7 @@ namespace Tumba.CanLindaControl.Model
 {
     public class CoinControlIniKeys
     {
-        public const string AccountToCoinControl = "AccountToCoinControl";
+        public const string AddressToCoinControl = "AddressToCoinControl";
         public const string LindaWalletAdditionalArgs = "LindaWalletAdditionalArgs";
         public const string LindaWalletExeFilePath = "LindaWalletExeFilePath";
         public const string RequiredConfirmations = "RequiredConfirmations";
@@ -16,11 +16,11 @@ namespace Tumba.CanLindaControl.Model
     }
     public class CoinControlIni : BaseIni
     {
-        public string AccountToCoinControl
+        public string AddressToCoinControl
         {
             get
             {
-                return ParseStringValue(CoinControlIniKeys.AccountToCoinControl);
+                return ParseStringValue(CoinControlIniKeys.AddressToCoinControl);
             }
         }
 
@@ -84,9 +84,9 @@ namespace Tumba.CanLindaControl.Model
         {
             errors = new List<string>();
 
-            if (!ValidateStrValue(AccountToCoinControl))
+            if (!ValidateStrValue(AddressToCoinControl))
             {
-                AddValueError(errors, CoinControlIniKeys.AccountToCoinControl, typeof(string));
+                AddValueError(errors, CoinControlIniKeys.AddressToCoinControl, typeof(string));
             }
 
             if (!ValidateStrValue(LindaWalletAdditionalArgs))

@@ -7,6 +7,7 @@ using System.Timers;
 using Tumba.CanLindaControl.DataConnectors.Linda;
 using Tumba.CanLindaControl.Helpers;
 using Tumba.CanLindaControl.Model;
+using Tumba.CanLindaControl.Model.Linda;
 using Tumba.CanLindaControl.Model.Linda.Requests;
 using Tumba.CanLindaControl.Model.Linda.Responses;
 
@@ -34,7 +35,7 @@ namespace Tumba.CanLindaControl.Services
             List<TransactionResponse> stakingTransactions;
             TransactionHelper helper = new TransactionHelper(m_dataConnector);
             if (!helper.TryGetStakingTransactions(
-                m_config.AccountToCoinControl,
+                m_config.AddressToCoinControl,
                 30,
                 out stakingTransactions,
                 out errorMessage))
@@ -110,7 +111,7 @@ namespace Tumba.CanLindaControl.Services
             List<TransactionResponse> imatureTransactions;
             TransactionHelper helper = new TransactionHelper(m_dataConnector);
             if (!helper.TryGetImatureTransactions(
-                m_config.AccountToCoinControl,
+                m_config.AddressToCoinControl,
                 1,
                 out imatureTransactions,
                 out errorMessage))
@@ -190,35 +191,36 @@ namespace Tumba.CanLindaControl.Services
 
         private void DoCoinControl(List<UnspentResponse> unspentInNeedOfCoinControl)
         {
-            string toAddress, errorMessage;
-            if (!TransactionHelper.TryGetToAddress(unspentInNeedOfCoinControl, out toAddress, out errorMessage))
-            {
-                MessageService.Fail(errorMessage);
-                return;
-            }
-
-            decimal amount = GetAmount(unspentInNeedOfCoinControl);
             decimal fee = GetFee();
             if (fee < 0)
             {
                 return;
             }
 
-            decimal amountAfterFee = amount - fee;
-            MessageService.Info(string.Format("Amount After Fee: {0} LINDA.", amountAfterFee));
-
+            string errorMessage;
             if (!TryUnlockWallet(out errorMessage))
             {
                 MessageService.Error(errorMessage);
                 return;
             }
 
+            CreateRawTransactionRequest createRequest = new CreateRawTransactionRequest();
+            createRequest.Inputs = new List<TransactionInput>();
+
+            foreach (UnspentResponse transaction in unspentInNeedOfCoinControl)
+            {
+                createRequest.Inputs.Add(TransactionInput.CreateFromUnspent(transaction));
+            }
+
+            createRequest.SendFullAmountTo(m_config.AddressToCoinControl, fee);
+
+            MessageService.Info(string.Format("Amount: {0} LINDA.", createRequest.AmountAfterFee + fee));
+            MessageService.Info(string.Format("Amount After Fee: {0} LINDA.", createRequest.AmountAfterFee));
+
             TransactionHelper helper = new TransactionHelper(m_dataConnector);
             string transactionId;
-            if (!helper.TrySendFrom(
-                m_config.AccountToCoinControl,
-                toAddress,
-                amountAfterFee,
+            if (!helper.TrySendRawTransaction(
+                createRequest,
                 out transactionId,
                 out errorMessage))
             {
@@ -254,20 +256,6 @@ namespace Tumba.CanLindaControl.Services
             }
         }
 
-        private decimal GetAmount(List<UnspentResponse> unspentInNeedOfCoinControl)
-        {
-            decimal amount = 0;
-            string address = unspentInNeedOfCoinControl[0].Address;
-            foreach (UnspentResponse unspent in unspentInNeedOfCoinControl)
-            {
-                amount += unspent.Amount;
-            }
-
-            MessageService.Info(string.Format("Amount: {0} LINDA.", amount));
-
-            return amount;
-        }
-
         private decimal GetFee()
         {
             string errorMessage;
@@ -287,7 +275,7 @@ namespace Tumba.CanLindaControl.Services
         private void ProcessNext()
         {
             MessageService.Break();
-            MessageService.Info(string.Format("Account: {0}.", m_config.AccountToCoinControl));
+            MessageService.Info(string.Format("Address: {0}", m_config.AddressToCoinControl));
 
             string errorMessage;
             if (!TryUnlockWalletForStakingOnly(out errorMessage))
@@ -299,7 +287,7 @@ namespace Tumba.CanLindaControl.Services
             List<UnspentResponse> unspentInNeedOfCoinControl;
             TransactionHelper helper = new TransactionHelper(m_dataConnector);
             if (!helper.TryGetUnspentInNeedOfCoinControl(
-                m_config.AccountToCoinControl,
+                m_config.AddressToCoinControl,
                 out unspentInNeedOfCoinControl,
                 out errorMessage))
             {
