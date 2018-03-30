@@ -7,22 +7,33 @@ namespace Tumba.CanLindaControl.Model
     public class CoinControlStatusReport
     {
         public TimeSpan ExpectedTimeToEarnReward { get; set; }
-        public TimeSpan ExpectedTimeToStartStaking { get; set; }
+        public TimeSpan ExpectedTimeToStartStaking
+        {
+            get
+            {
+                return UnspentTransactionDateTime.UtcDateTime.AddHours(24) - DateTime.UtcNow;
+            }
+        }
         public DateTimeOffset OldestRewardDateTime { get; set; }
         public decimal RewardTotal { get; set; }
         public bool Staking { get; set; }
         public CoinControlStatus Status { get; private set; }
         public string StatusMessage { get; private set; }
+        public bool CoinControlAddressStaking
+        {
+            get { return Staking && ExpectedTimeToStartStaking.TotalSeconds <= 0; }
+        }
+        public DateTimeOffset UnspentTransactionDateTime { get; set; }
 
         public CoinControlStatusReport()
         {
             ExpectedTimeToEarnReward = TimeSpan.MinValue;
-            ExpectedTimeToStartStaking = TimeSpan.MinValue;
             OldestRewardDateTime = DateTimeOffset.MinValue;
             RewardTotal = 0;
             Staking = false;
             Status = CoinControlStatus.NotReadyWaitingForPaymentToYourself;
             StatusMessage = null;
+            UnspentTransactionDateTime = DateTimeOffset.MinValue;
         }
 
         private static string FormatCoinControlStatusMessage(string statusMessage)
@@ -54,9 +65,9 @@ namespace Tumba.CanLindaControl.Model
                 {
                     messageService.Info(string.Format(
                         "Staking: {0}.",
-                        (Staking ? "Yes" : "No")));
+                        (CoinControlAddressStaking ? "Yes" : "No")));
 
-                    if (Staking)
+                    if (CoinControlAddressStaking)
                     {
                         messageService.Info(string.Format(
                             "Expected time to earn reward: {0} days {1} hours.", 

@@ -83,70 +83,16 @@ namespace Tumba.CanLindaControl.Services
             }
 
             statusReport.Staking = stakingInfoResponse.Staking;
-            
 
             if (stakingInfoResponse.Staking)
             {
                 statusReport.ExpectedTimeToEarnReward = TimeSpan.FromSeconds(stakingInfoResponse.ExpectedTimeInSeconds);
-            }
-            else
-            {
-                if (!CheckExpectedTimeToStartStaking(ref statusReport))
-                {
-                    return false;
-                }
             }
 
             if (!string.IsNullOrEmpty(stakingInfoResponse.Errors))
             {
                 MessageService.Error(string.Format("Staking errors found: {0}", stakingInfoResponse.Errors));
             }
-
-            return true;
-        }
-
-        private bool CheckExpectedTimeToStartStaking(ref CoinControlStatusReport statusReport)
-        {
-            string errorMessage;
-            ListUnspentRequest unspentRequest = new ListUnspentRequest();
-            List<UnspentResponse> unspentResponses;
-            if (!m_dataConnector.TryPost<List<UnspentResponse>>(
-                unspentRequest, 
-                out unspentResponses, 
-                out errorMessage))
-            {
-                MessageService.Error(errorMessage);
-                return false;
-            }
-
-            long time = 0;
-            foreach (UnspentResponse unspent in unspentResponses)
-            {
-                if (unspent.Account != null && 
-                    unspent.Account.Equals(m_config.AccountToCoinControl, StringComparison.InvariantCultureIgnoreCase) &&
-                    unspent.Confirmations >= m_config.RequiredConfirmations)
-                {
-                    GetTransactionRequest transRequest = new GetTransactionRequest()
-                    {
-                        TransactionId = unspent.TransactionId
-                    };
-                    
-                    GetTransactionResponse transResponse;
-                    if (!m_dataConnector.TryPost(transRequest, out transResponse, out errorMessage))
-                    {
-                        MessageService.Error(errorMessage);
-                        return false;
-                    }
-
-                    if (transResponse.Time > time)
-                    {
-                        time = transResponse.Time;
-                    }
-                }
-            }
-
-            DateTimeOffset transactionTime = TransactionHelper.GetTransactionTime(time);
-            statusReport.ExpectedTimeToStartStaking = transactionTime.UtcDateTime.AddHours(24) - DateTime.UtcNow;
 
             return true;
         }
@@ -219,6 +165,15 @@ namespace Tumba.CanLindaControl.Services
 
             if (unspentInNeedOfCoinControl.Count == 1)
             {
+                if (!SetUnspentTransactionDateTime(
+                    unspentInNeedOfCoinControl,
+                    statusReport,
+                    out errorMessage))
+                {
+                    MessageService.Error(errorMessage);
+                    return null;
+                }
+
                 statusReport.SetStatus(
                     CoinControlStatus.NotReadyOneUnspent,
                     "Not ready - Only one unspent transaction");
@@ -552,6 +507,26 @@ namespace Tumba.CanLindaControl.Services
                 m_config.RunFrequencyInMilliSeconds * 3,
                 true, 
                 out errorMessage);
+        }
+
+        private bool SetUnspentTransactionDateTime(
+            List<UnspentResponse> unspentInNeedOfCoinControl,
+            CoinControlStatusReport statusReport,
+            out string errorMessage)
+        {
+            GetTransactionRequest transRequest = new GetTransactionRequest()
+            {
+                TransactionId = unspentInNeedOfCoinControl[0].TransactionId
+            };
+            
+            GetTransactionResponse transResponse;
+            if (!m_dataConnector.TryPost(transRequest, out transResponse, out errorMessage))
+            {
+                return false;
+            }
+
+            statusReport.UnspentTransactionDateTime = TransactionHelper.GetTransactionTime(transResponse.Time);
+            return true;
         }
     }
 }
