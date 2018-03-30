@@ -70,9 +70,15 @@ namespace Tumba.CanLindaControl.Model
                     if (CoinControlAddressStaking)
                     {
                         messageService.Info(string.Format(
-                            "Expected time to earn reward: {0} days {1} hours.", 
+                            "Expected time to earn reward: {0} day(s) {1} hour(s).", 
                             ExpectedTimeToEarnReward.Days, 
                             ExpectedTimeToEarnReward.Hours));
+
+                        messageService.Info(string.Format(
+                            "Time spent staking: {0} day(s) {1} hour(s) {2} minute(s).",
+                            ExpectedTimeToStartStaking.Days * -1,
+                            ExpectedTimeToStartStaking.Hours * -1,
+                            ExpectedTimeToStartStaking.Minutes * -1));
                     }
                     else
                     {
@@ -80,7 +86,7 @@ namespace Tumba.CanLindaControl.Model
                         {
                             messageService.Info(string.Format(
                                 "Expected time to start staking: {0} hours {1} minutes.", 
-                                ExpectedTimeToStartStaking.Hours, 
+                                Math.Floor(ExpectedTimeToStartStaking.TotalHours), 
                                 ExpectedTimeToStartStaking.Minutes));
                         }
                         else
